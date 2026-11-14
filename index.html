@@ -124,7 +124,9 @@
   .datebar .mid{flex:1;text-align:center}
   .datebar .mid .d{font-size:1.25rem;font-weight:800}
   .datebar .mid .h{color:var(--muted);font-size:.95rem}
-  .datebar input[type=date],.datebar input[type=month]{margin-top:4px;font:inherit;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:#fff}
+  .datebar input[type=date],.datebar input[type=month]{display:block;box-sizing:border-box;width:100%;max-width:230px;margin:6px auto 0;font:inherit;text-align:center;text-align-last:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff;color:var(--ink)}
+  .datebar input::-webkit-date-and-time-value{text-align:center;margin:0 auto}
+  .datebar input::-webkit-calendar-picker-indicator{margin-left:6px}
   .week{display:flex;justify-content:center;gap:6px;margin:6px 0 4px}
   .week span{font-size:.62rem;font-weight:700;color:var(--muted);text-align:center}
   .week i{display:block;width:26px;height:26px;border:2px solid var(--muted);border-radius:6px;margin-top:2px;position:relative}
