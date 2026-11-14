@@ -791,7 +791,20 @@
   $('sShare').onclick = () => window.open('https://wa.me/?text='+encodeURIComponent(periodText(sumType, sumAnchor)), '_blank');
 
   /* ---------- summary as image / PDF ---------- */
-  function drawSummary(ctx, W, type, anchor){
+  async function photosInRange(from, to){
+    let all = [];
+    try { all = await dbAll(); } catch(e){}
+    const sel = all.filter(p => p.date >= from && p.date <= to)
+      .sort((a,b) => (a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+    const loaded = await Promise.all(sel.map(p => new Promise(res => {
+      const im = new Image();
+      im.onload = () => res(Object.assign({}, p, { img: im }));
+      im.onerror = () => res(null);
+      im.src = p.data;
+    })));
+    return loaded.filter(Boolean);
+  }
+  function drawSummary(ctx, W, type, anchor, photos){
     const P = periodOf(type, anchor), list = inRange(P.from, P.to), S = statsOf(list);
     const PS = statsOf(inRange(P.prev[0], P.prev[1]));
     const C = { ink:'#1f2933', muted:'#5f6b76', brand:'#0f766e', soft:'#d7efec', bad:'#b42318', badBg:'#fde2df', box:'#f2f0ea', line:'#d9d4c7' };
@@ -878,18 +891,41 @@
         y += 26; ctx.fillStyle = C.line; ctx.fillRect(M, y-4, W - 2*M, 1);
       });
     }
+    if (photos && photos.length){
+      const MAXP = 24, shown = photos.slice(0, MAXP), cols = 3, gap = 10, cw = (W - 2*M - gap*(cols-1)) / cols;
+      title('Gambar kemajuan ('+photos.length+')');
+      for (let i = 0; i < shown.length; i += cols){
+        for (let j = 0; j < cols && i + j < shown.length; j++){
+          const p = shown[i+j], x = M + j*(cw+gap), s = Math.min(p.img.width, p.img.height);
+          ctx.save(); ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x, y, cw, cw, 10); else ctx.rect(x, y, cw, cw);
+          ctx.clip();
+          ctx.drawImage(p.img, (p.img.width - s)/2, (p.img.height - s)/2, s, s, x, y, cw, cw);
+          ctx.restore();
+          text(dmy(p.date)+(p.time ? ' · '+time12(p.time) : ''), x, y + cw + 15, 11, '700', C.muted);
+          if (p.caption){
+            let c = p.caption; font(11, '400');
+            while (c.length > 1 && ctx.measureText(c).width > cw) c = c.slice(0, -2);
+            text(c === p.caption ? c : c.trimEnd()+'…', x, y + cw + 29, 11, '400', C.ink);
+          }
+        }
+        y += cw + 38;
+      }
+      if (photos.length > MAXP){ note('…dan '+(photos.length - MAXP)+' gambar lagi tidak dipaparkan.'); }
+    }
     y += 18;
     wrap('!!! = bacaan tinggi atau rendah. Ini hanya ringkasan daripada catatan sendiri; sentiasa ikut nasihat doktor.', M, W - 2*M, 12, '400', C.muted, 17);
     text('Dijana '+dmy(todayStr())+' '+time12(nowTime()), M, y+4, 12, '400', C.muted);
     return y + 4 + M;
   }
-  function summaryCanvas(){
-    const W = 720, SC = 2;
+  async function summaryCanvas(){
+    const W = 720, SC = 2, P = periodOf(sumType, sumAnchor);
+    const photos = await photosInRange(P.from, P.to);
     const probe = document.createElement('canvas'); probe.width = W; probe.height = 9999;
-    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, sumType, sumAnchor));
+    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, sumType, sumAnchor, photos));
     const cv = document.createElement('canvas'); cv.width = W*SC; cv.height = h*SC;
     const c = cv.getContext('2d'); c.scale(SC, SC);
-    drawSummary(c, W, sumType, sumAnchor);
+    drawSummary(c, W, sumType, sumAnchor, photos);
     return { cv, W, h };
   }
   function makePdf(jpg, wpx, hpx, pw, ph){
@@ -916,7 +952,8 @@
     const P = periodOf(sumType, sumAnchor);
     if (!inRange(P.from, P.to).length){ toast('Tiada catatan dalam tempoh ini.'); return; }
     try {
-      const { cv, W, h } = summaryCanvas();
+      toast('Menyediakan fail…');
+      const { cv, W, h } = await summaryCanvas();
       const name = 'ringkasan-'+SUM_NAMA[sumType].toLowerCase()+'-'+P.from;
       let blob, fname, mime;
       if (kind === 'png'){
