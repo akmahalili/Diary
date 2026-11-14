@@ -1,4 +1,4 @@
-const CACHE = 'diari-v15';
+const CACHE = 'diari-v16';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'config.js', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

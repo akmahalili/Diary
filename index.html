@@ -353,7 +353,7 @@
       <h3>ℹ️ Panduan warna</h3>
       <p class="info">
         <b>Gula (mmol/L):</b> ungu &lt; 4.0 rendah · hijau normal · kuning agak tinggi · merah tinggi.<br>
-        <b>Tekanan darah:</b> hijau &lt; 130/80 · kuning 130–139 / 80–89 · merah ≥ 140/90.<br>
+        <b>Tekanan darah:</b> hijau &lt; 130/80 · kuning 130–139 / 80–89 · merah ≥ 140/90 atau angka atas &lt; 90.<br>
         Ini hanya panduan umum. Sentiasa ikut nasihat doktor.
       </p>
     </div>
@@ -546,8 +546,8 @@
   function bpClass(s, d){
     if (s == null || d == null) return null;
     if (s >= 140 || d >= 90) return ['bad','Tinggi'];
+    if (s < 90) return ['low','Rendah'];   // only the top number decides 'low' (a low bottom number alone is common in older adults)
     if (s >= 130 || d >= 80) return ['warn','Agak tinggi'];
-    if (s < 90 || d < 60) return ['low','Rendah'];
     return ['ok','Normal'];
   }
 
