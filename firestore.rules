@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Setiap diari keluarga ada ID rahsia 26 aksara (dalam pautan).
+    // Hanya orang yang tahu ID itu boleh baca atau tulis. Senarai semua diari tidak dibenarkan.
+
+    match /diaries/{diaryId}/entries/{id} {
+      allow read, delete: if diaryId.size() == 26;
+      allow create, update: if diaryId.size() == 26
+        && request.resource.data.keys().hasOnly(['id','date','time','meal','sugar','sys','dia','food','insulin','meds','note']);
+    }
+
+    match /diaries/{diaryId}/photos/{id} {
+      allow read, delete: if diaryId.size() == 26;
+      allow create, update: if diaryId.size() == 26
+        && request.resource.data.keys().hasOnly(['id','date','time','caption','data'])
+        && request.resource.data.data.size() < 900000;
+    }
+
+    match /diaries/{diaryId}/meta/{id} {
+      allow read: if diaryId.size() == 26;
+      allow create, update: if diaryId.size() == 26
+        && request.resource.data.keys().hasOnly(['name','age','sex','weight','height']);
+    }
+  }
+}

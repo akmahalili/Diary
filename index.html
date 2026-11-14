@@ -22,6 +22,7 @@
     --radius:16px;
   }
   *{box-sizing:border-box}
+  [hidden]{display:none!important}
   html{font-size:18px}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4;padding-bottom:110px}
   header{background:var(--brand);color:#fff;padding:14px 16px calc(14px);position:sticky;top:0;z-index:5}
@@ -59,6 +60,8 @@
   .profile .pg b{display:block;font-size:.85rem;white-space:nowrap}
   .profile .pg small{color:var(--muted);font-size:.7rem}
   .profile .pe{color:var(--muted)}
+  #syncLine{margin:2px 0 0;font-size:.78rem;opacity:.95}
+  #shareLink{width:100%;font-size:.8rem;margin-bottom:10px;padding:10px}
   /* alerts: high / low readings show in red */
   .redtxt{color:var(--bad);font-weight:800}
   .reading{border:2px solid transparent}
@@ -207,6 +210,7 @@
   <div>
     <h1>🩺 Diari Kesihatan</h1>
     <p>Gula dalam darah &amp; tekanan darah</p>
+    <p id="syncLine" hidden></p>
   </div>
 </header>
 
@@ -296,6 +300,18 @@
 
   <!-- LAGI -->
   <section id="view-lagi" hidden class="more">
+    <div class="card" id="shareCard">
+      <h3>👨‍👩‍👧 Kongsi dengan keluarga</h3>
+      <p class="info" id="shareInfo"></p>
+      <button class="btn primary" id="shareOn">Aktifkan perkongsian keluarga</button>
+      <div id="shareOnBox" hidden>
+        <input type="text" id="shareLink" readonly aria-label="Pautan keluarga">
+        <button class="btn primary" id="shareCopyLink">Salin pautan</button>
+        <button class="btn" id="shareWa">Hantar pautan melalui WhatsApp</button>
+        <button class="btn" id="shareOff">Berhenti berkongsi</button>
+        <button class="btn danger" id="shareWipe">Padam data dari awan</button>
+      </div>
+    </div>
     <div class="card">
       <h3>📤 Hantar ringkasan kepada doktor / keluarga</h3>
       <p class="info">Salin ringkasan 7 hari terakhir, kemudian tampal di WhatsApp.</p>
@@ -309,7 +325,7 @@
     </div>
     <div class="card">
       <h3>💾 Simpan salinan</h3>
-      <p class="info">Semua data disimpan dalam telefon ini sahaja. Simpan salinan secara berkala supaya tidak hilang.</p>
+      <p class="info" id="backupInfo">Semua data disimpan dalam telefon ini sahaja. Simpan salinan secara berkala supaya tidak hilang.</p>
       <button class="btn" id="export">Muat turun salinan (fail)</button>
       <button class="btn" id="csv">Muat turun Excel (CSV)</button>
       <button class="btn" id="importBtn">Pulihkan daripada fail</button>
@@ -439,6 +455,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="config.js"></script>
 <script>
 (() => {
   'use strict';
@@ -457,6 +474,7 @@
   function saveProfile(){
     try { localStorage.setItem(PKEY, JSON.stringify(profile)); }
     catch(e){ toast('Gagal menyimpan. Ruang telefon penuh?'); }
+    cloud.putProfile();
   }
   function profileLine(){
     const p = profile, a = [];
@@ -1107,8 +1125,10 @@
       t.onerror = t.onabort = () => rej(t.error);
     }));
   }
-  const dbPut = rec => dbTx('readwrite', s => s.put(rec));
-  const dbDelete = id => dbTx('readwrite', s => s.delete(id));
+  const dbPutLocal = rec => dbTx('readwrite', s => s.put(rec));
+  const dbDeleteLocal = id => dbTx('readwrite', s => s.delete(id));
+  const dbPut = rec => dbPutLocal(rec).then(r => { cloud.putPhoto(rec); return r; });
+  const dbDelete = id => dbDeleteLocal(id).then(r => { cloud.delPhoto(id); return r; });
   const dbAll = () => dbTx('readonly', s => s.getAll());
   const dbByDate = d => dbTx('readonly', s => s.index('date').getAll(IDBKeyRange.only(d)));
   function dbCounts(){
@@ -1294,6 +1314,7 @@
     if (editingId) entries = entries.map(e => e.id === editingId ? rec : e);
     else entries.push(rec);
     save();
+    cloud.putEntry(rec);
     closeForm();
     currentDate = date;
     showTab('hari');
@@ -1315,7 +1336,7 @@
     const ed = ev.target.closest('[data-edit]'), dl = ev.target.closest('[data-del]');
     if (ed) openForm(entries.find(e => e.id === ed.dataset.edit));
     if (dl && confirm('Padam catatan ini?')){
-      entries = entries.filter(e => e.id !== dl.dataset.del); save(); renderDay(); toast('Dipadam');
+      entries = entries.filter(e => e.id !== dl.dataset.del); save(); cloud.delEntry(dl.dataset.del); renderDay(); toast('Dipadam');
     }
   });
   $('history').addEventListener('click', ev => {
@@ -1405,6 +1426,7 @@
         const ids = new Set(entries.map(x => x.id));
         const add = data.filter(x => x && x.id && x.date && x.time && !ids.has(x.id));
         entries = entries.concat(add); save();
+        add.forEach(e => cloud.putEntry(e));
         Promise.all(importPhotos.map(dbPut)).catch(() => {}).then(() => {
           renderDay();
           toast('✅ '+add.length+' catatan'+(importPhotos.length ? ', '+importPhotos.length+' gambar' : '')+' dipulihkan');
@@ -1414,8 +1436,192 @@
     r.readAsText(f); e.target.value = '';
   };
 
+  /* ---------- family sharing (Firebase Firestore) ---------- */
+  const CKEY = 'diariKesihatan.cloudId', CSYNC = 'diariKesihatan.cloudSynced';
+  const FB_BASE = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  const E_KEYS = ['id','date','time','meal','sugar','sys','dia','food','insulin','meds','note'];
+  const P_KEYS = ['id','date','time','caption','data'];
+  const PR_KEYS = ['name','age','sex','weight','height'];
+  const pick = (o, keys, defs) => {
+    const r = {};
+    keys.forEach(k => { r[k] = (o && o[k] !== undefined) ? o[k] : (defs && k in defs ? defs[k] : null); });
+    return r;
+  };
+  const validId = s => /^[a-z2-7]{26}$/.test(s || '');
+  function genId(){
+    const b = new Uint8Array(16); crypto.getRandomValues(b);
+    const A = 'abcdefghijklmnopqrstuvwxyz234567';
+    let bits = 0, v = 0, out = '';
+    for (const x of b){
+      v = ((v << 8) | x) & 0xffff; bits += 8;
+      while (bits >= 5){ out += A[(v >>> (bits - 5)) & 31]; bits -= 5; }
+    }
+    if (bits > 0) out += A[(v << (5 - bits)) & 31];
+    return out;
+  }
+  function setSync(state){
+    const el = $('syncLine');
+    const t = { connecting: '☁️ Menyegerak…', online: '☁️ Dikongsi dengan keluarga', offline: '☁️ Tiada internet. Akan disegerak kemudian', error: '☁️ Gagal menyambung ke awan' }[state];
+    if (!t){ el.hidden = true; return; }
+    el.textContent = t; el.hidden = false;
+  }
+  function rerender(){
+    if (!$('view-hari').hidden) renderDay();
+    if (!$('view-ringkas').hidden) renderSummary();
+    if (!$('view-graf').hidden) renderCharts();
+    if (!$('view-sejarah').hidden) renderHistory();
+  }
+  let rerenderT = 0;
+  const rerenderSoon = () => { cancelAnimationFrame(rerenderT); rerenderT = requestAnimationFrame(rerender); };
+
+  const cloud = {
+    id: null, ready: false, fs: null, db: null, unsubs: [], queue: [],
+    cfg(){ const c = window.DIARI_FIREBASE; return c && c.projectId && c.apiKey ? c : null; },
+    ref(...p){ return this.fs.doc(this.db, 'diaries', this.id, ...p); },
+    col(c){ return this.fs.collection(this.db, 'diaries', this.id, c); },
+    run(fn){
+      if (!this.id) return;
+      if (this.ready){ try { fn(); } catch(e){ console.warn(e); } } else this.queue.push(fn);
+    },
+    putEntry(e){ this.run(() => this.fs.setDoc(this.ref('entries', e.id), pick(e, E_KEYS)).catch(console.warn)); },
+    delEntry(id){ this.run(() => this.fs.deleteDoc(this.ref('entries', id)).catch(console.warn)); },
+    putPhoto(p){ this.run(() => this.fs.setDoc(this.ref('photos', p.id), pick(p, P_KEYS, { caption: '' })).catch(console.warn)); },
+    delPhoto(id){ this.run(() => this.fs.deleteDoc(this.ref('photos', id)).catch(console.warn)); },
+    putProfile(){ this.run(() => this.fs.setDoc(this.ref('meta', 'profile'), pick(profile, PR_KEYS)).catch(console.warn)); },
+    async load(){
+      if (this.fs) return;
+      const [appM, fs] = await Promise.all([import(FB_BASE+'firebase-app.js'), import(FB_BASE+'firebase-firestore.js')]);
+      const app = appM.initializeApp(this.cfg());
+      this.db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) });
+      this.fs = fs;
+    },
+    async start(id, owner){
+      this.stop(); this.id = id;
+      if (!this.cfg()){ setSync('error'); return false; }
+      setSync('connecting');
+      try { await this.load(); } catch(e){ console.warn(e); setSync('error'); return false; }
+      const fs = this.fs;
+      const onErr = e => { console.warn(e); setSync('error'); };
+      const status = snap => setSync(snap.metadata.fromCache ? (navigator.onLine ? 'connecting' : 'offline') : 'online');
+
+      this.unsubs.push(fs.onSnapshot(this.col('entries'), snap => {
+        snap.docChanges().forEach(ch => {
+          if (ch.type === 'removed'){ entries = entries.filter(e => e.id !== ch.doc.id); return; }
+          const d = ch.doc.data();
+          if (!d.id || !d.date || !d.time) return;
+          const i = entries.findIndex(e => e.id === d.id);
+          if (i >= 0) entries[i] = d; else entries.push(d);
+        });
+        save(); status(snap); rerenderSoon();
+      }, onErr));
+      this.unsubs.push(fs.onSnapshot(this.col('photos'), snap => {
+        const ps = [];
+        snap.docChanges().forEach(ch => {
+          if (ch.type === 'removed') ps.push(dbDeleteLocal(ch.doc.id));
+          else { const d = ch.doc.data(); if (d.id && d.date && d.data) ps.push(dbPutLocal(d)); }
+        });
+        Promise.all(ps).catch(() => {}).then(rerenderSoon);
+        status(snap);
+      }, onErr));
+      this.unsubs.push(fs.onSnapshot(this.ref('meta', 'profile'), snap => {
+        if (!snap.exists()) return;
+        profile = pick(snap.data(), PR_KEYS);
+        try { localStorage.setItem(PKEY, JSON.stringify(profile)); } catch(e){}
+        renderProfile();
+      }, onErr));
+
+      this.ready = true;
+      let synced = null; try { synced = localStorage.getItem(CSYNC); } catch(e){}
+      if (synced !== id){
+        // first time on this device: upload what is already here
+        entries.forEach(e => this.putEntry(e));
+        try { (await dbAll()).forEach(p => this.putPhoto(p)); } catch(e){}
+        if (owner && profileLine()) this.putProfile();
+        try { localStorage.setItem(CSYNC, id); } catch(e){}
+      }
+      this.queue.splice(0).forEach(fn => { try { fn(); } catch(e){ console.warn(e); } });
+      return true;
+    },
+    stop(){
+      this.unsubs.forEach(u => { try { u(); } catch(e){} });
+      this.unsubs = []; this.ready = false; this.id = null; this.queue = [];
+      setSync(null);
+    },
+    async wipe(){
+      const fs = this.fs, tasks = [];
+      for (const c of ['entries', 'photos']){
+        const s = await fs.getDocs(this.col(c));
+        s.forEach(d => tasks.push(fs.deleteDoc(d.ref)));
+      }
+      tasks.push(fs.deleteDoc(this.ref('meta', 'profile')));
+      await Promise.all(tasks);
+    }
+  };
+
+  const cloudLink = () => location.origin + location.pathname + '#k=' + cloud.id;
+  function renderShare(){
+    const has = !!cloud.cfg(), on = !!cloud.id;
+    $('shareOn').hidden = !has || on;
+    $('shareOnBox').hidden = !on;
+    $('shareInfo').textContent = !has
+      ? 'Perkongsian keluarga belum disediakan pada aplikasi ini.'
+      : on ? 'Perkongsian aktif. Sesiapa yang ada pautan di bawah boleh melihat dan menambah catatan. Hantar hanya kepada ahli keluarga.'
+           : 'Ahli keluarga boleh nampak dan tambah catatan ini dalam telefon mereka sendiri. Data disimpan dalam pelayan awan.';
+    $('backupInfo').textContent = on
+      ? 'Data disegerakkan dengan keluarga. Simpan salinan juga sekali-sekala sebagai langkah keselamatan.'
+      : 'Semua data disimpan dalam telefon ini sahaja. Simpan salinan secara berkala supaya tidak hilang.';
+    if (on) $('shareLink').value = cloudLink();
+  }
+  function forgetCloud(){ try { localStorage.removeItem(CKEY); localStorage.removeItem(CSYNC); } catch(e){} }
+  $('shareOn').onclick = async () => {
+    if (!confirm('Aktifkan perkongsian keluarga?\n\nData dalam telefon ini akan disimpan dalam pelayan awan dan boleh dilihat oleh sesiapa yang ada pautan. Hantar pautan hanya kepada ahli keluarga.')) return;
+    const id = genId();
+    try { localStorage.setItem(CKEY, id); localStorage.removeItem(CSYNC); } catch(e){}
+    const ok = await cloud.start(id, true);
+    renderShare();
+    toast(ok ? '✅ Perkongsian diaktifkan' : 'Gagal menyambung. Semak internet.');
+  };
+  $('shareCopyLink').onclick = async () => {
+    try { await navigator.clipboard.writeText(cloudLink()); toast('✅ Pautan disalin'); }
+    catch(e){ prompt('Salin pautan ini:', cloudLink()); }
+  };
+  $('shareWa').onclick = () => window.open('https://wa.me/?text='+encodeURIComponent('Pautan Diari Kesihatan keluarga: '+cloudLink()), '_blank');
+  $('shareOff').onclick = () => {
+    if (!confirm('Berhenti berkongsi pada telefon ini?\n\nCatatan dalam telefon ini kekal. Data dalam awan tidak dipadam.')) return;
+    cloud.stop(); forgetCloud(); renderShare();
+  };
+  $('shareWipe').onclick = async () => {
+    if (!confirm('Padam SEMUA data dari awan?\n\nAhli keluarga lain tidak lagi nampak data. Catatan dalam telefon ini kekal.')) return;
+    try {
+      if (!cloud.ready) throw new Error('belum bersambung');
+      await cloud.wipe(); cloud.stop(); forgetCloud(); renderShare(); toast('Data awan dipadam');
+    } catch(e){ toast('Gagal memadam. Semak internet.'); }
+  };
+  window.addEventListener('online', () => { if (cloud.id) setSync('connecting'); });
+  window.addEventListener('offline', () => { if (cloud.id) setSync('offline'); });
+
+  async function initCloud(){
+    const m = /^#k=([a-z2-7]{26})$/.exec(location.hash);
+    let stored = null; try { stored = localStorage.getItem(CKEY); } catch(e){}
+    if (m) history.replaceState(null, '', location.pathname + location.search);
+    if (m && cloud.cfg() && m[1] !== stored){
+      const warn = entries.length ? '\n\nCatatan sedia ada dalam telefon ini akan digabungkan ke dalam diari keluarga.' : '';
+      if (confirm('Sertai diari keluarga ini?\n\nAnda akan nampak dan boleh tambah catatan bersama ahli keluarga lain.'+warn)){
+        try { localStorage.setItem(CKEY, m[1]); localStorage.removeItem(CSYNC); } catch(e){}
+        renderShare();
+        await cloud.start(m[1], false);
+      }
+    } else if (validId(stored) && cloud.cfg()){
+      cloud.id = stored; renderShare();
+      await cloud.start(stored, false);
+    }
+    renderShare();
+  }
+
   renderProfile();
   renderDay();
+  renderShare();
+  initCloud();
 })();
 </script>
 </body>
