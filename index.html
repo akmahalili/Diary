@@ -277,6 +277,13 @@
         <button type="button" class="btn" id="sCopy">📋 Salin teks</button>
         <button type="button" class="btn" id="sShare">WhatsApp</button>
       </div>
+      <div id="sDailyBtns">
+        <p class="info" style="margin:0 0 6px">Atau asingkan <b>satu halaman untuk setiap hari</b> dalam tempoh ini:</p>
+        <div class="sbtns">
+          <button type="button" class="btn" id="sDayPdf">📑 PDF tiap hari</button>
+          <button type="button" class="btn" id="sDayImg">🖼️ Gambar tiap hari</button>
+        </div>
+      </div>
     </div>
     <p class="info">Butang Gambar dan PDF menghasilkan ringkasan <b>mengikut tab yang dipilih</b>: Harian = hari itu sahaja, Mingguan = minggu itu, Bulanan = bulan itu. Gambar kemajuan tempoh itu turut disertakan. Ini hanya ringkasan daripada catatan anda; sentiasa ikut nasihat doktor.</p>
   </section>
@@ -317,6 +324,17 @@
       <p class="info">Salin ringkasan 7 hari terakhir, kemudian tampal di WhatsApp.</p>
       <button class="btn primary" id="copy">Salin ringkasan (7 hari)</button>
       <button class="btn" id="share">Kongsi melalui WhatsApp</button>
+    </div>
+    <div class="card">
+      <h3>📑 Ringkasan harian ikut tarikh</h3>
+      <p class="info">Satu halaman untuk setiap hari, sama seperti ringkasan harian. Pilih julat tarikh.</p>
+      <div class="row">
+        <div><label class="f" for="rFrom">Dari</label><input type="date" id="rFrom"></div>
+        <div><label class="f" for="rTo">Hingga</label><input type="date" id="rTo"></div>
+      </div>
+      <p class="info" id="rInfo" style="margin:8px 0"></p>
+      <button class="btn primary" id="rPdf">📄 PDF (satu halaman setiap hari)</button>
+      <button class="btn" id="rImg">🖼️ Gambar (satu gambar setiap hari)</button>
     </div>
     <div class="card">
       <h3>🖨️ Cetak</h3>
@@ -707,6 +725,7 @@
     const P = periodOf(sumType, sumAnchor), list = inRange(P.from, P.to), S = statsOf(list);
     const PS = statsOf(inRange(P.prev[0], P.prev[1]));
     const t = todayStr();
+    $('sDailyBtns').hidden = sumType === 'hari';
     $('sLabel').textContent = P.label;
     $('sSub').textContent = (P.from <= t && t <= P.to) ? (sumType === 'hari' ? 'Hari ini' : (sumType === 'minggu' ? 'Minggu ini' : 'Bulan ini')) : '';
 
@@ -935,35 +954,55 @@
     text('Dijana '+dmy(todayStr())+' '+time12(nowTime()), M, y+4, 12, '400', C.muted);
     return y + 4 + M;
   }
-  async function summaryCanvas(){
-    const W = 720, SC = 2, P = periodOf(sumType, sumAnchor);
+  const summaryCanvas = () => summaryCanvasFor(sumType, sumAnchor);
+  async function summaryCanvasFor(type, anchor){
+    const W = 720, SC = 2, P = periodOf(type, anchor);
     const photos = await photosInRange(P.from, P.to);
     const probe = document.createElement('canvas'); probe.width = W; probe.height = 9999;
-    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, sumAnchor, photos, sumType));
+    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, anchor, photos, type));
     const cv = document.createElement('canvas'); cv.width = W*SC; cv.height = h*SC;
     const c = cv.getContext('2d'); c.scale(SC, SC);
-    drawSummary(c, W, sumAnchor, photos, sumType);
+    drawSummary(c, W, anchor, photos, type);
     return { cv, W, h };
   }
-  function makePdf(jpg, wpx, hpx, pw, ph){
+  function makePdfPages(pages){
     const enc = new TextEncoder(), parts = [], offs = [];
     let len = 0;
     const push = b => { const u = typeof b === 'string' ? enc.encode(b) : b; parts.push(u); len += u.length; };
-    const obj = (n, body) => { offs[n] = len; push(n+' 0 obj\n'+body+'\nendobj\n'); };
+    const n = pages.length, total = 2 + 3*n;
     push('%PDF-1.4\n');
-    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pw+' '+ph+'] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
-    offs[4] = len;
-    push('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+wpx+' /Height '+hpx+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpg.length+' >>\nstream\n');
-    push(jpg); push('\nendstream\nendobj\n');
-    const cs = 'q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';
-    obj(5, '<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream');
+    offs[1] = len; push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    offs[2] = len; push('2 0 obj\n<< /Type /Pages /Kids ['+pages.map((_, i) => (3+3*i)+' 0 R').join(' ')+'] /Count '+n+' >>\nendobj\n');
+    pages.forEach((p, i) => {
+      const pg = 3+3*i, im = 4+3*i, ct = 5+3*i;
+      offs[pg] = len;
+      push(pg+' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+p.pw+' '+p.ph+'] /Resources << /XObject << /Im0 '+im+' 0 R >> >> /Contents '+ct+' 0 R >>\nendobj\n');
+      offs[im] = len;
+      push(im+' 0 obj\n<< /Type /XObject /Subtype /Image /Width '+p.wpx+' /Height '+p.hpx+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+p.jpg.length+' >>\nstream\n');
+      push(p.jpg); push('\nendstream\nendobj\n');
+      const cs = 'q '+p.pw+' 0 0 '+p.ph+' 0 0 cm /Im0 Do Q';
+      offs[ct] = len;
+      push(ct+' 0 obj\n<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream\nendobj\n');
+    });
     const xr = len;
-    let x = 'xref\n0 6\n0000000000 65535 f \n';
-    for (let i = 1; i <= 5; i++) x += String(offs[i]).padStart(10, '0')+' 00000 n \n';
-    push(x+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
+    let x = 'xref\n0 '+(total+1)+'\n0000000000 65535 f \n';
+    for (let i = 1; i <= total; i++) x += String(offs[i]).padStart(10, '0')+' 00000 n \n';
+    push(x+'trailer\n<< /Size '+(total+1)+' /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
     return new Blob(parts, { type: 'application/pdf' });
+  }
+  const makePdf = (jpg, wpx, hpx, pw, ph) => makePdfPages([{ jpg, wpx, hpx, pw, ph }]);
+  async function deliverFiles(files, label){
+    if (navigator.canShare && navigator.canShare({ files })){
+      try { await navigator.share({ files, title: 'Ringkasan Diari Kesihatan' }); return; }
+      catch(e){ if (e && e.name === 'AbortError') return; }
+    }
+    for (const f of files){
+      const url = URL.createObjectURL(f), a = document.createElement('a');
+      a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      if (files.length > 1) await new Promise(r => setTimeout(r, 400));
+    }
+    toast('✅ '+label+' disimpan');
   }
   async function exportSummary(kind){
     const P = periodOf(sumType, sumAnchor);
@@ -980,18 +1019,56 @@
         const bytes = new Uint8Array(await jpg.arrayBuffer());
         blob = makePdf(bytes, cv.width, cv.height, (W*0.75).toFixed(2), (h*0.75).toFixed(2)); fname = name+'.pdf'; mime = 'application/pdf';
       }
-      const file = new File([blob], fname, { type: mime });
-      if (navigator.canShare && navigator.canShare({ files: [file] })){
-        try { await navigator.share({ files: [file], title: 'Ringkasan Diari Kesihatan' }); return; }
-        catch(e){ if (e && e.name === 'AbortError') return; }
-      }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = fname;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      toast('✅ '+(kind === 'png' ? 'Gambar' : 'PDF')+' disimpan');
+      await deliverFiles([new File([blob], fname, { type: mime })], kind === 'png' ? 'Gambar' : 'PDF');
     } catch(e){ toast('Gagal menjana fail.'); }
   }
+  async function datesWithData(from, to){
+    const set = new Set(inRange(from, to).map(e => e.date));
+    try { const c = await dbCounts(); Object.keys(c).forEach(d => { if (d >= from && d <= to) set.add(d); }); } catch(e){}
+    return [...set].sort();
+  }
+  let exporting = false;
+  async function exportDaily(kind, from, to){
+    if (exporting) return;
+    if (!from || !to || from > to){ toast('Julat tarikh tidak betul.'); return; }
+    const dates = await datesWithData(from, to);
+    if (!dates.length){ toast('Tiada catatan dalam tempoh ini.'); return; }
+    if (dates.length > 62 && !confirm('Ada '+dates.length+' hari. Ini mungkin ambil masa agak lama. Teruskan?')) return;
+    exporting = true;
+    try {
+      const files = [], pages = [];
+      for (let i = 0; i < dates.length; i++){
+        toast('Menyediakan '+(i+1)+'/'+dates.length+'…');
+        const { cv, W, h } = await summaryCanvasFor('hari', dates[i]);
+        if (kind === 'png'){
+          const b = await new Promise(r => cv.toBlob(r, 'image/png'));
+          files.push(new File([b], 'ringkasan-harian-'+dates[i]+'.png', { type: 'image/png' }));
+        } else {
+          const jb = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88));
+          pages.push({ jpg: new Uint8Array(await jb.arrayBuffer()), wpx: cv.width, hpx: cv.height, pw: (W*0.75).toFixed(2), ph: (h*0.75).toFixed(2) });
+        }
+        cv.width = cv.height = 0;
+      }
+      if (kind === 'pdf')
+        files.push(new File([makePdfPages(pages)], 'ringkasan-harian-'+dates[0]+(dates.length > 1 ? '_hingga_'+dates[dates.length-1] : '')+'.pdf', { type: 'application/pdf' }));
+      await deliverFiles(files, kind === 'png' ? dates.length+' gambar' : 'PDF '+dates.length+' halaman');
+    } catch(e){ console.warn(e); toast('Gagal menjana fail.'); }
+    exporting = false;
+  }
+  $('sDayPdf').onclick = () => { const P = periodOf(sumType, sumAnchor); exportDaily('pdf', P.from, P.to); };
+  $('sDayImg').onclick = () => { const P = periodOf(sumType, sumAnchor); exportDaily('png', P.from, P.to); };
+  async function initRangeInputs(){
+    const t = todayStr();
+    let first = entries.length ? entries.reduce((m, e) => e.date < m ? e.date : m, t) : t;
+    try { const c = await dbCounts(); Object.keys(c).forEach(d => { if (d < first) first = d; }); } catch(e){}
+    if (!$('rFrom').value) $('rFrom').value = first;
+    if (!$('rTo').value) $('rTo').value = t;
+    const n = (await datesWithData($('rFrom').value || first, $('rTo').value || t)).length;
+    $('rInfo').textContent = n ? n+' hari ada catatan dalam julat ini.' : 'Tiada catatan dalam julat ini.';
+  }
+  $('rFrom').onchange = $('rTo').onchange = () => initRangeInputs();
+  $('rPdf').onclick = () => exportDaily('pdf', $('rFrom').value, $('rTo').value);
+  $('rImg').onclick = () => exportDaily('png', $('rFrom').value, $('rTo').value);
   $('sImg').onclick = () => exportSummary('png');
   $('sPdf').onclick = () => exportSummary('pdf');
 
@@ -1259,6 +1336,7 @@
     if (name === 'sejarah') renderHistory();
     if (name === 'graf') renderCharts();
     if (name === 'ringkas') renderSummary();
+    if (name === 'lagi') initRangeInputs();
     if (name === 'hari') renderDay();
     window.scrollTo(0,0);
   }
