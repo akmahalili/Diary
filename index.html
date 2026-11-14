@@ -274,7 +274,7 @@
         <button type="button" class="btn" id="sShare">WhatsApp</button>
       </div>
     </div>
-    <p class="info">Ini hanya ringkasan daripada catatan anda; sentiasa ikut nasihat doktor.</p>
+    <p class="info">Butang Gambar dan PDF menghasilkan laporan lengkap: ringkasan <b>harian, mingguan dan bulanan</b> untuk tarikh yang dipilih, termasuk gambar kemajuan bulan itu. Ini hanya ringkasan daripada catatan anda; sentiasa ikut nasihat doktor.</p>
   </section>
 
   <!-- GRAF -->
@@ -694,10 +694,8 @@
 
     if (!list.length){
       $('sumBody').innerHTML = '<div class="card empty"><div class="big">📋</div><div>Tiada catatan dalam tempoh ini.</div></div>';
-      $('sBtns').hidden = true;
       return;
     }
-    $('sBtns').hidden = false;
     let h = '';
 
     h += '<div class="card sblock"><div class="stats">' +
@@ -801,9 +799,7 @@
     })));
     return loaded.filter(Boolean);
   }
-  function drawSummary(ctx, W, type, anchor, photos){
-    const P = periodOf(type, anchor), list = inRange(P.from, P.to), S = statsOf(list);
-    const PS = statsOf(inRange(P.prev[0], P.prev[1]));
+  function drawSummary(ctx, W, anchor, photos){
     const C = { ink:'#1f2933', muted:'#5f6b76', brand:'#0f766e', soft:'#d7efec', bad:'#b42318', badBg:'#fde2df', box:'#f2f0ea', line:'#d9d4c7' };
     const M = 28, FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
     let y = 0;
@@ -834,10 +830,19 @@
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, 9999);
     ctx.fillStyle = C.brand; ctx.fillRect(0, 0, W, 98);
     text('Diari Kesihatan', M, 44, 28, '800', '#fff');
-    text('Ringkasan '+SUM_NAMA[type]+'  ·  '+P.label, M, 76, 17, '600', C.soft);
+    text('Laporan Ringkasan  ·  '+dayName(anchor)+', '+longDate(anchor), M, 76, 17, '600', C.soft);
     y = 98 + 30;
     if (profileLine()) wrap(profileLine(), M, W - 2*M, 16, '700', C.ink, 22);
-    if (!list.length){ y += 20; text('Tiada catatan dalam tempoh ini.', M, y, 17, '500', C.muted); return y + 40; }
+    const section = type => {
+      const P = periodOf(type, anchor), list = inRange(P.from, P.to), S = statsOf(list);
+      const PS = statsOf(inRange(P.prev[0], P.prev[1]));
+      y += 16;
+      ctx.fillStyle = C.brand; ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(M, y, W - 2*M, 38, 10); else ctx.rect(M, y, W - 2*M, 38);
+      ctx.fill();
+      text('Ringkasan '+SUM_NAMA[type]+'  ·  '+P.label, M+14, y+25, 17, '800', '#fff');
+      y += 38 + 8;
+      if (!list.length){ text('Tiada catatan dalam tempoh ini.', M, y+18, 15, '500', C.muted); y += 40; return; }
     y += 4;
     boxes([{l:'Bacaan', v:S.n}, {l:'Hari dicatat', v:S.days + (P.n > 1 ? '/'+P.n : '')}]);
 
@@ -888,9 +893,11 @@
         y += 26; ctx.fillStyle = C.line; ctx.fillRect(M, y-4, W - 2*M, 1);
       });
     }
+    };
+    ['hari', 'minggu', 'bulan'].forEach(section);
     if (photos && photos.length){
-      const MAXP = 24, shown = photos.slice(0, MAXP), cols = 3, gap = 10, cw = (W - 2*M - gap*(cols-1)) / cols;
-      title('Gambar kemajuan ('+photos.length+')');
+      const MAXP = 24, shown = photos.slice(-MAXP), cols = 3, gap = 10, cw = (W - 2*M - gap*(cols-1)) / cols;
+      title('Gambar kemajuan · '+periodOf('bulan', anchor).label+' ('+photos.length+')');
       for (let i = 0; i < shown.length; i += cols){
         for (let j = 0; j < cols && i + j < shown.length; j++){
           const p = shown[i+j], x = M + j*(cw+gap), s = Math.min(p.img.width, p.img.height);
@@ -908,7 +915,7 @@
         }
         y += cw + 38;
       }
-      if (photos.length > MAXP){ note('…dan '+(photos.length - MAXP)+' gambar lagi tidak dipaparkan.'); }
+      if (photos.length > MAXP){ note('…dan '+(photos.length - MAXP)+' gambar lebih awal tidak dipaparkan.'); }
     }
     y += 18;
     wrap('Merah = bacaan tinggi atau rendah. Ini hanya ringkasan daripada catatan sendiri; sentiasa ikut nasihat doktor.', M, W - 2*M, 12, '400', C.muted, 17);
@@ -916,13 +923,13 @@
     return y + 4 + M;
   }
   async function summaryCanvas(){
-    const W = 720, SC = 2, P = periodOf(sumType, sumAnchor);
+    const W = 720, SC = 2, P = periodOf('bulan', sumAnchor);
     const photos = await photosInRange(P.from, P.to);
     const probe = document.createElement('canvas'); probe.width = W; probe.height = 9999;
-    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, sumType, sumAnchor, photos));
+    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, sumAnchor, photos));
     const cv = document.createElement('canvas'); cv.width = W*SC; cv.height = h*SC;
     const c = cv.getContext('2d'); c.scale(SC, SC);
-    drawSummary(c, W, sumType, sumAnchor, photos);
+    drawSummary(c, W, sumAnchor, photos);
     return { cv, W, h };
   }
   function makePdf(jpg, wpx, hpx, pw, ph){
@@ -946,12 +953,12 @@
     return new Blob(parts, { type: 'application/pdf' });
   }
   async function exportSummary(kind){
-    const P = periodOf(sumType, sumAnchor);
-    if (!inRange(P.from, P.to).length){ toast('Tiada catatan dalam tempoh ini.'); return; }
+    const P = periodOf('bulan', sumAnchor);
+    if (!inRange(P.from, P.to).length && !(await photosInRange(P.from, P.to)).length){ toast('Tiada catatan bulan ini.'); return; }
     try {
       toast('Menyediakan fail…');
       const { cv, W, h } = await summaryCanvas();
-      const name = 'ringkasan-'+SUM_NAMA[sumType].toLowerCase()+'-'+P.from;
+      const name = 'laporan-ringkasan-'+sumAnchor;
       let blob, fname, mime;
       if (kind === 'png'){
         blob = await new Promise(r => cv.toBlob(r, 'image/png')); fname = name+'.png'; mime = 'image/png';
