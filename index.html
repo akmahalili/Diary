@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>Diari Kesihatan</title>
+<style>
+  :root{
+    --bg:#f6f3ec; --card:#ffffff; --ink:#1f2933; --muted:#5f6b76; --line:#d9d4c7;
+    --brand:#0f766e; --brand-dark:#0b5a54; --brand-soft:#d7efec;
+    --ok:#1b7f3b; --ok-bg:#dff3e4;
+    --warn:#a15c00; --warn-bg:#fdecc8;
+    --bad:#b42318; --bad-bg:#fde2df;
+    --low:#6d28d9; --low-bg:#ece4fb;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html{font-size:18px}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4;padding-bottom:110px}
+  header{background:var(--brand);color:#fff;padding:14px 16px calc(14px);position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:1.3rem}
+  header p{margin:2px 0 0;font-size:.85rem;opacity:.9}
+  main{max-width:720px;margin:0 auto;padding:14px 14px 0}
+  button{font:inherit;cursor:pointer}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tab{flex:1;padding:12px 6px;border:2px solid var(--brand);background:#fff;color:var(--brand);border-radius:12px;font-weight:700}
+  .tab[aria-selected="true"]{background:var(--brand);color:#fff}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.08);padding:14px;margin-bottom:14px}
+
+  /* date navigator like the paper "Tarikh" line */
+  .datebar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .datebar .nav{width:52px;height:52px;border-radius:12px;border:2px solid var(--line);background:#fff;font-size:1.5rem;font-weight:700;color:var(--brand)}
+  .datebar .mid{flex:1;text-align:center}
+  .datebar .mid .d{font-size:1.25rem;font-weight:800}
+  .datebar .mid .h{color:var(--muted);font-size:.95rem}
+  .datebar input[type=date]{margin-top:4px;font:inherit;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:#fff}
+  .week{display:flex;justify-content:center;gap:6px;margin:6px 0 4px}
+  .week span{font-size:.62rem;font-weight:700;color:var(--muted);text-align:center}
+  .week i{display:block;width:26px;height:26px;border:2px solid var(--muted);border-radius:6px;margin-top:2px;position:relative}
+  .week .on i{background:var(--brand);border-color:var(--brand)}
+  .week .on i::after{content:"✓";color:#fff;font-style:normal;position:absolute;inset:0;text-align:center;line-height:22px;font-weight:800}
+
+  /* entries */
+  .entry{border:2px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;background:#fff}
+  .entry-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .time{font-size:1.4rem;font-weight:800}
+  .pill{display:inline-block;padding:3px 12px;border-radius:99px;font-size:.85rem;font-weight:700;background:var(--brand-soft);color:var(--brand-dark)}
+  .readings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+  .reading{border-radius:12px;padding:10px;text-align:center;background:#f2f0ea}
+  .reading .lbl{font-size:.78rem;color:var(--muted);font-weight:600}
+  .reading .val{font-size:1.7rem;font-weight:800;line-height:1.2}
+  .reading .unit{font-size:.75rem;color:var(--muted)}
+  .reading .tag{font-size:.78rem;font-weight:700;margin-top:2px}
+  .reading.ok{background:var(--ok-bg)} .reading.ok .tag{color:var(--ok)}
+  .reading.warn{background:var(--warn-bg)} .reading.warn .tag{color:var(--warn)}
+  .reading.bad{background:var(--bad-bg)} .reading.bad .tag{color:var(--bad)}
+  .reading.low{background:var(--low-bg)} .reading.low .tag{color:var(--low)}
+  .notes{font-size:.95rem}
+  .notes div{margin:2px 0}
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{flex:1;padding:9px;border-radius:10px;border:2px solid var(--line);background:#fff;font-weight:700}
+  .actions .del{color:var(--bad);border-color:#f1c0bb}
+  .empty{text-align:center;color:var(--muted);padding:26px 10px}
+  .empty .big{font-size:2.6rem}
+
+  /* summary strip */
+  .sum{display:flex;gap:8px;margin-bottom:12px}
+  .sum div{flex:1;background:#fff;border-radius:12px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  .sum b{display:block;font-size:1.2rem}
+  .sum small{color:var(--muted);font-size:.72rem}
+
+  /* FAB */
+  .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));background:var(--brand);color:#fff;border:none;border-radius:99px;padding:16px 28px;font-size:1.15rem;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:6;white-space:nowrap}
+  .fab:active{background:var(--brand-dark)}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:20}
+  .overlay.open{display:flex}
+  .sheet{background:var(--bg);width:100%;max-width:720px;max-height:94vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+  .sheet h2{margin:0 0 12px;font-size:1.3rem}
+  label.f{display:block;font-weight:700;margin:12px 0 4px}
+  .hint{font-weight:400;color:var(--muted);font-size:.8rem}
+  input[type=date],input[type=time],input[type=number],input[type=text],textarea{width:100%;font:inherit;font-size:1.15rem;padding:12px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+  input:focus,textarea:focus{outline:3px solid var(--brand-soft);border-color:var(--brand)}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1;min-width:0}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:14px 6px;border-radius:12px;border:2px solid var(--line);background:#fff;font-weight:800;font-size:1rem}
+  .seg button[aria-pressed="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .bp{display:flex;align-items:center;gap:8px}
+  .bp span{font-size:1.8rem;font-weight:800}
+  .btnrow{display:flex;gap:10px;margin-top:18px}
+  .btn{flex:1;padding:15px;border-radius:12px;border:2px solid var(--brand);font-weight:800;font-size:1.1rem;background:#fff;color:var(--brand)}
+  .btn.primary{background:var(--brand);color:#fff}
+  .btn.danger{border-color:var(--bad);color:var(--bad)}
+  .err{color:var(--bad);font-weight:700;margin-top:8px;min-height:1.2em}
+
+  /* history */
+  .hday{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:#fff;border:2px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+  .hday .l b{display:block;font-size:1.05rem}
+  .hday .l small{color:var(--muted)}
+  .hday .r{text-align:right;font-size:.9rem}
+  .hday .r b{font-size:1.1rem}
+
+  .info{font-size:.85rem;color:var(--muted)}
+  .more h3{margin:0 0 6px}
+  .more .btn{margin-bottom:10px;width:100%;display:block}
+  .toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#1f2933;color:#fff;padding:12px 20px;border-radius:12px;z-index:50;display:none;font-weight:700}
+
+  @media print{
+    header,.tabs,.fab,.actions,.datebar .nav,.toast{display:none!important}
+    body{background:#fff;padding:0}
+    .card,.entry{box-shadow:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🩺 Diari Kesihatan</h1>
+  <p>Gula dalam darah &amp; tekanan darah</p>
+</header>
+
+<main>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-hari" aria-selected="true">📅 Hari</button>
+    <button class="tab" role="tab" id="tab-sejarah" aria-selected="false">📚 Sejarah</button>
+    <button class="tab" role="tab" id="tab-lagi" aria-selected="false">⚙️ Lagi</button>
+  </div>
+
+  <!-- HARI -->
+  <section id="view-hari">
+    <div class="card">
+      <div class="datebar">
+        <button class="nav" id="prev" aria-label="Hari sebelumnya">‹</button>
+        <div class="mid">
+          <div class="d" id="dLabel"></div>
+          <div class="h" id="hLabel"></div>
+          <input type="date" id="dPick" aria-label="Pilih tarikh">
+        </div>
+        <button class="nav" id="next" aria-label="Hari seterusnya">›</button>
+      </div>
+      <div class="week" id="week"></div>
+    </div>
+    <div class="sum" id="sum"></div>
+    <div id="entries"></div>
+  </section>
+
+  <!-- SEJARAH -->
+  <section id="view-sejarah" hidden>
+    <div id="history"></div>
+  </section>
+
+  <!-- LAGI -->
+  <section id="view-lagi" hidden class="more">
+    <div class="card">
+      <h3>📤 Hantar ringkasan kepada doktor / keluarga</h3>
+      <p class="info">Salin ringkasan 7 hari terakhir, kemudian tampal di WhatsApp.</p>
+      <button class="btn primary" id="copy">Salin ringkasan (7 hari)</button>
+      <button class="btn" id="share">Kongsi melalui WhatsApp</button>
+    </div>
+    <div class="card">
+      <h3>🖨️ Cetak</h3>
+      <p class="info">Cetak semua catatan untuk dibawa ke klinik.</p>
+      <button class="btn" id="print">Cetak semua catatan</button>
+    </div>
+    <div class="card">
+      <h3>💾 Simpan salinan</h3>
+      <p class="info">Semua data disimpan dalam telefon ini sahaja. Simpan salinan secara berkala supaya tidak hilang.</p>
+      <button class="btn" id="export">Muat turun salinan (fail)</button>
+      <button class="btn" id="csv">Muat turun Excel (CSV)</button>
+      <button class="btn" id="importBtn">Pulihkan daripada fail</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <div class="card">
+      <h3>ℹ️ Panduan warna</h3>
+      <p class="info">
+        <b>Gula (mmol/L):</b> ungu &lt; 4.0 rendah · hijau normal · kuning agak tinggi · merah tinggi.<br>
+        <b>Tekanan darah:</b> hijau &lt; 130/80 · kuning 130–139 / 80–89 · merah ≥ 140/90.<br>
+        Ini hanya panduan umum. Sentiasa ikut nasihat doktor.
+      </p>
+    </div>
+  </section>
+</main>
+
+<button class="fab" id="add">➕ Tambah Bacaan</button>
+
+<!-- FORM -->
+<div class="overlay" id="overlay" role="dialog" aria-modal="true">
+  <form class="sheet" id="form" autocomplete="off" novalidate>
+    <h2 id="formTitle">Tambah Bacaan</h2>
+
+    <div class="row">
+      <div>
+        <label class="f" for="fDate">Tarikh</label>
+        <input type="date" id="fDate" required>
+      </div>
+      <div>
+        <label class="f" for="fTime">Waktu</label>
+        <input type="time" id="fTime" required>
+      </div>
+    </div>
+
+    <label class="f">Sebelum / Selepas Makan</label>
+    <div class="seg" id="segMeal">
+      <button type="button" data-v="sebelum" aria-pressed="false">Sebelum</button>
+      <button type="button" data-v="selepas" aria-pressed="false">Selepas</button>
+      <button type="button" data-v="" aria-pressed="true">Tiada</button>
+    </div>
+
+    <label class="f" for="fSugar">Bacaan gula dalam darah <span class="hint">(mmol/L)</span></label>
+    <input type="number" id="fSugar" inputmode="decimal" step="0.1" min="0" max="50" placeholder="cth: 5.6">
+
+    <label class="f">Bacaan darah tinggi <span class="hint">(atas / bawah)</span></label>
+    <div class="bp">
+      <input type="number" id="fSys" inputmode="numeric" min="40" max="300" placeholder="129" aria-label="Atas (sistolik)">
+      <span>/</span>
+      <input type="number" id="fDia" inputmode="numeric" min="20" max="200" placeholder="56" aria-label="Bawah (diastolik)">
+    </div>
+
+    <label class="f" for="fFood">🍚 Makan apa hari ini</label>
+    <input type="text" id="fFood" placeholder="cth: bihun, telur hancur">
+
+    <label class="f" for="fInsulin">💉 Insulin <span class="hint">(unit)</span></label>
+    <input type="number" id="fInsulin" inputmode="decimal" step="1" min="0" placeholder="cth: 8">
+
+    <label class="f" for="fMeds">💊 Ubat makan apa</label>
+    <input type="text" id="fMeds" placeholder="cth: Atorvastatin, Fortum">
+
+    <label class="f" for="fNote">📝 Catatan lain</label>
+    <textarea id="fNote" rows="2" placeholder="cth: Bantenga turun 8 → 5"></textarea>
+
+    <div class="err" id="err"></div>
+    <div class="btnrow">
+      <button type="button" class="btn" id="cancel">Batal</button>
+      <button type="submit" class="btn primary">Simpan</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const KEY = 'diariKesihatan.v1';
+  const HARI = ['Ahad','Isnin','Selasa','Rabu','Khamis','Jumaat','Sabtu'];
+  const HARI_PENDEK = ['ISN','SEL','RAB','KHA','JUM','SAB','AHD']; // Mon-first, like the paper
+  const BULAN = ['Januari','Februari','Mac','April','Mei','Jun','Julai','Ogos','September','Oktober','November','Disember'];
+
+  const $ = id => document.getElementById(id);
+  let entries = load();
+  let currentDate = todayStr();
+  let editingId = null;
+  let meal = '';
+
+  /* ---------- storage ---------- */
+  function load(){
+    try { const v = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(v) ? v : []; }
+    catch(e){ return []; }
+  }
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(entries)); }
+    catch(e){ toast('Gagal menyimpan. Ruang telefon penuh?'); }
+  }
+
+  /* ---------- date helpers ---------- */
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function fmt(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function todayStr(){ return fmt(new Date()); }
+  function parse(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); }
+  function addDays(s,n){ const d = parse(s); d.setDate(d.getDate()+n); return fmt(d); }
+  function longDate(s){ const d = parse(s); return d.getDate()+' '+BULAN[d.getMonth()]+' '+d.getFullYear(); }
+  function dmy(s){ const d = parse(s); return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
+  function dayName(s){ return HARI[parse(s).getDay()]; }
+  function time12(t){
+    const [h,m] = t.split(':').map(Number);
+    return ((h%12)||12)+':'+pad(m)+' '+(h<12?'AM':'PM');
+  }
+  function nowTime(){ const d = new Date(); return pad(d.getHours())+':'+pad(d.getMinutes()); }
+
+  /* ---------- classification ---------- */
+  function sugarClass(v, mealType){
+    if (v == null) return null;
+    if (v < 4.0) return ['low','Rendah'];
+    const hi = mealType === 'selepas' ? 10.0 : 7.0;
+    const vhi = mealType === 'selepas' ? 13.0 : 10.0;
+    if (v <= hi) return ['ok','Normal'];
+    if (v <= vhi) return ['warn','Agak tinggi'];
+    return ['bad','Tinggi'];
+  }
+  function bpClass(s, d){
+    if (s == null || d == null) return null;
+    if (s >= 140 || d >= 90) return ['bad','Tinggi'];
+    if (s >= 130 || d >= 80) return ['warn','Agak tinggi'];
+    if (s < 90 || d < 60) return ['low','Rendah'];
+    return ['ok','Normal'];
+  }
+
+  /* ---------- helpers ---------- */
+  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function mealLabel(m){ return m === 'sebelum' ? 'Sebelum makan' : m === 'selepas' ? 'Selepas makan' : ''; }
+  function byDay(s){ return entries.filter(e => e.date === s).sort((a,b) => a.time.localeCompare(b.time)); }
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', 2200);
+  }
+
+  /* ---------- render: Hari ---------- */
+  function renderDay(){
+    $('dLabel').textContent = longDate(currentDate);
+    $('hLabel').textContent = dayName(currentDate) + (currentDate === todayStr() ? ' · Hari ini' : '');
+    $('dPick').value = currentDate;
+
+    // paper-style weekday boxes
+    const wd = (parse(currentDate).getDay() + 6) % 7; // Mon=0
+    $('week').innerHTML = HARI_PENDEK.map((n,i) =>
+      '<div class="'+(i===wd?'on':'')+'"><span>'+n+'</span><i></i></div>').join('');
+
+    const list = byDay(currentDate);
+
+    // summary
+    const sugars = list.filter(e => e.sugar != null).map(e => e.sugar);
+    const bps = list.filter(e => e.sys != null && e.dia != null);
+    const lastBp = bps.length ? bps[bps.length-1] : null;
+    $('sum').innerHTML =
+      '<div><b>'+list.length+'</b><small>Bacaan</small></div>' +
+      '<div><b>'+(sugars.length ? (sugars.reduce((a,b)=>a+b,0)/sugars.length).toFixed(1) : '–')+'</b><small>Purata gula</small></div>' +
+      '<div><b>'+(lastBp ? lastBp.sys+'/'+lastBp.dia : '–')+'</b><small>Darah terakhir</small></div>';
+
+    if (!list.length){
+      $('entries').innerHTML = '<div class="card empty"><div class="big">📝</div><div>Belum ada catatan untuk hari ini.<br>Tekan <b>Tambah Bacaan</b> di bawah.</div></div>';
+      return;
+    }
+
+    $('entries').innerHTML = list.map(e => {
+      const sc = sugarClass(e.sugar, e.meal);
+      const bc = bpClass(e.sys, e.dia);
+      const notes = [];
+      if (e.food) notes.push('<div>🍚 <b>Makan:</b> '+esc(e.food)+'</div>');
+      if (e.insulin != null) notes.push('<div>💉 <b>Insulin:</b> '+e.insulin+' unit</div>');
+      if (e.meds) notes.push('<div>💊 <b>Ubat:</b> '+esc(e.meds)+'</div>');
+      if (e.note) notes.push('<div>📝 '+esc(e.note)+'</div>');
+      return '<div class="entry">' +
+        '<div class="entry-top"><span class="time">'+time12(e.time)+'</span>' +
+        (e.meal ? '<span class="pill">'+mealLabel(e.meal)+'</span>' : '') + '</div>' +
+        ((e.sugar != null || e.sys != null) ?
+          '<div class="readings">' +
+          '<div class="reading '+(sc?sc[0]:'')+'"><div class="lbl">Gula darah</div>' +
+            '<div class="val">'+(e.sugar != null ? e.sugar : '–')+'</div><div class="unit">mmol/L</div>' +
+            (sc ? '<div class="tag">'+sc[1]+'</div>' : '') + '</div>' +
+          '<div class="reading '+(bc?bc[0]:'')+'"><div class="lbl">Darah tinggi</div>' +
+            '<div class="val">'+(e.sys != null ? e.sys+'/'+e.dia : '–')+'</div><div class="unit">mmHg</div>' +
+            (bc ? '<div class="tag">'+bc[1]+'</div>' : '') + '</div>' +
+          '</div>' : '') +
+        (notes.length ? '<div class="notes">'+notes.join('')+'</div>' : '') +
+        '<div class="actions"><button data-edit="'+e.id+'">✏️ Ubah</button><button class="del" data-del="'+e.id+'">🗑️ Padam</button></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ---------- render: Sejarah ---------- */
+  function renderHistory(){
+    const days = [...new Set(entries.map(e => e.date))].sort().reverse();
+    if (!days.length){
+      $('history').innerHTML = '<div class="card empty"><div class="big">📚</div><div>Belum ada sejarah catatan.</div></div>';
+      return;
+    }
+    $('history').innerHTML = days.map(d => {
+      const l = byDay(d);
+      const s = l.filter(e => e.sugar != null).map(e => e.sugar);
+      const b = l.filter(e => e.sys != null);
+      return '<button class="hday" data-day="'+d+'">' +
+        '<div class="l"><b>'+dayName(d)+', '+dmy(d)+'</b><small>'+l.length+' bacaan</small></div>' +
+        '<div class="r">' +
+          (s.length ? 'Gula: <b>'+Math.min(...s)+(s.length>1?' – '+Math.max(...s):'')+'</b><br>' : '') +
+          (b.length ? 'Darah: <b>'+b[b.length-1].sys+'/'+b[b.length-1].dia+'</b>' : '') +
+        '</div></button>';
+    }).join('');
+  }
+
+  /* ---------- tabs ---------- */
+  function showTab(name){
+    ['hari','sejarah','lagi'].forEach(n => {
+      $('view-'+n).hidden = n !== name;
+      $('tab-'+n).setAttribute('aria-selected', n === name);
+    });
+    $('add').style.display = name === 'lagi' ? 'none' : '';
+    if (name === 'sejarah') renderHistory();
+    if (name === 'hari') renderDay();
+    window.scrollTo(0,0);
+  }
+
+  /* ---------- form ---------- */
+  function setMeal(v){
+    meal = v;
+    document.querySelectorAll('#segMeal button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
+  }
+  function openForm(e){
+    editingId = e ? e.id : null;
+    $('formTitle').textContent = e ? 'Ubah Bacaan' : 'Tambah Bacaan';
+    $('fDate').value = e ? e.date : currentDate;
+    $('fTime').value = e ? e.time : nowTime();
+    setMeal(e ? (e.meal || '') : '');
+    $('fSugar').value = e && e.sugar != null ? e.sugar : '';
+    $('fSys').value = e && e.sys != null ? e.sys : '';
+    $('fDia').value = e && e.dia != null ? e.dia : '';
+    $('fFood').value = e ? (e.food || '') : '';
+    $('fInsulin').value = e && e.insulin != null ? e.insulin : '';
+    $('fMeds').value = e ? (e.meds || '') : '';
+    $('fNote').value = e ? (e.note || '') : '';
+    $('err').textContent = '';
+    $('overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeForm(){
+    $('overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  const num = id => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+
+  $('form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const date = $('fDate').value, time = $('fTime').value;
+    const sugar = num('fSugar'), sys = num('fSys'), dia = num('fDia'), insulin = num('fInsulin');
+    const food = $('fFood').value.trim(), meds = $('fMeds').value.trim(), note = $('fNote').value.trim();
+    if (!date || !time){ $('err').textContent = 'Sila isi tarikh dan waktu.'; return; }
+    if ((sys == null) !== (dia == null)){ $('err').textContent = 'Isi kedua-dua nombor darah tinggi (atas dan bawah).'; return; }
+    if (sugar == null && sys == null && insulin == null && !food && !meds && !note){
+      $('err').textContent = 'Sila isi sekurang-kurangnya satu maklumat.'; return;
+    }
+    if (sugar != null && (sugar <= 0 || sugar > 50)){ $('err').textContent = 'Bacaan gula nampak tidak betul. Semak semula.'; return; }
+    if (sys != null && (sys < 40 || sys > 300 || dia < 20 || dia > 200)){ $('err').textContent = 'Bacaan darah tinggi nampak tidak betul. Semak semula.'; return; }
+
+    const rec = { id: editingId || Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+      date, time, meal, sugar, sys, dia, food, insulin, meds, note };
+    if (editingId) entries = entries.map(e => e.id === editingId ? rec : e);
+    else entries.push(rec);
+    save();
+    closeForm();
+    currentDate = date;
+    showTab('hari');
+    toast('✅ Disimpan');
+    const sc = sugarClass(sugar, meal), bc = bpClass(sys, dia);
+    if ((sc && sc[0] === 'low') ) setTimeout(() => alert('⚠️ Gula darah rendah. Makan atau minum sesuatu yang manis dan hubungi doktor jika tidak sihat.'), 300);
+    else if ((sc && sc[0] === 'bad') || (bc && bc[0] === 'bad')) setTimeout(() => alert('⚠️ Bacaan tinggi. Rehat dan hubungi doktor jika berterusan atau rasa tidak sihat.'), 300);
+  });
+  $('cancel').onclick = closeForm;
+  $('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeForm(); });
+  $('segMeal').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMeal(b.dataset.v); });
+  $('add').onclick = () => openForm();
+
+  /* ---------- day interactions ---------- */
+  $('prev').onclick = () => { currentDate = addDays(currentDate,-1); renderDay(); };
+  $('next').onclick = () => { currentDate = addDays(currentDate,1); renderDay(); };
+  $('dPick').onchange = e => { if (e.target.value){ currentDate = e.target.value; renderDay(); } };
+  $('entries').addEventListener('click', ev => {
+    const ed = ev.target.closest('[data-edit]'), dl = ev.target.closest('[data-del]');
+    if (ed) openForm(entries.find(e => e.id === ed.dataset.edit));
+    if (dl && confirm('Padam catatan ini?')){
+      entries = entries.filter(e => e.id !== dl.dataset.del); save(); renderDay(); toast('Dipadam');
+    }
+  });
+  $('history').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-day]');
+    if (b){ currentDate = b.dataset.day; showTab('hari'); }
+  });
+  $('tab-hari').onclick = () => showTab('hari');
+  $('tab-sejarah').onclick = () => showTab('sejarah');
+  $('tab-lagi').onclick = () => showTab('lagi');
+
+  /* ---------- summary / export ---------- */
+  function summaryText(days){
+    const from = addDays(todayStr(), -(days-1));
+    const list = entries.filter(e => e.date >= from).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+    if (!list.length) return 'Tiada catatan.';
+    let out = '📋 Diari Kesihatan ('+dmy(from)+' – '+dmy(todayStr())+')\n';
+    let last = '';
+    list.forEach(e => {
+      if (e.date !== last){ out += '\n'+dayName(e.date)+' '+dmy(e.date)+'\n'; last = e.date; }
+      const p = [time12(e.time)];
+      if (e.meal) p.push(mealLabel(e.meal));
+      if (e.sugar != null) p.push('Gula '+e.sugar);
+      if (e.sys != null) p.push('BP '+e.sys+'/'+e.dia);
+      if (e.insulin != null) p.push('Insulin '+e.insulin+'u');
+      if (e.food) p.push('Makan: '+e.food);
+      if (e.meds) p.push('Ubat: '+e.meds);
+      if (e.note) p.push(e.note);
+      out += '• '+p.join(' | ')+'\n';
+    });
+    return out;
+  }
+  function download(name, text, type){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type}));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  $('copy').onclick = async () => {
+    const t = summaryText(7);
+    try { await navigator.clipboard.writeText(t); toast('✅ Disalin. Tampal di WhatsApp.'); }
+    catch(e){ prompt('Salin teks ini:', t); }
+  };
+  $('share').onclick = () => window.open('https://wa.me/?text='+encodeURIComponent(summaryText(7)), '_blank');
+  $('print').onclick = () => {
+    // print every day as paper-style list
+    const prevDate = currentDate;
+    const days = [...new Set(entries.map(e => e.date))].sort();
+    const w = window.open('', '_blank');
+    if (!w){ window.print(); return; }
+    w.document.write('<html><head><meta charset="utf-8"><title>Diari Kesihatan</title><style>body{font-family:sans-serif;padding:16px}h2{margin:18px 0 4px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:5px;font-size:13px;vertical-align:top}th{background:#eee}</style></head><body><h1>Diari Kesihatan</h1>' +
+      days.map(d => '<h2>Tarikh: '+dmy(d)+' ('+dayName(d)+')</h2><table><tr><th>Waktu</th><th>Bacaan gula</th><th>Bacaan darah tinggi</th><th>Catatan</th></tr>' +
+        byDay(d).map(e => '<tr><td>'+time12(e.time)+(e.meal?'<br>'+mealLabel(e.meal):'')+'</td><td>'+(e.sugar ?? '')+'</td><td>'+(e.sys != null ? e.sys+'/'+e.dia : '')+'</td><td>'+
+          [e.food && 'Makan: '+esc(e.food), e.insulin != null && 'Insulin '+e.insulin+' unit', e.meds && 'Ubat: '+esc(e.meds), e.note && esc(e.note)].filter(Boolean).join('<br>')+'</td></tr>').join('') +
+        '</table>').join('') + '</body></html>');
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+    currentDate = prevDate;
+  };
+  $('export').onclick = () => download('diari-kesihatan-'+todayStr()+'.json', JSON.stringify(entries,null,2), 'application/json');
+  $('csv').onclick = () => {
+    const q = v => '"'+String(v ?? '').replace(/"/g,'""')+'"';
+    const rows = [['Tarikh','Hari','Waktu','Sebelum/Selepas Makan','Gula (mmol/L)','Atas (sistolik)','Bawah (diastolik)','Makan apa','Insulin (unit)','Ubat','Catatan']];
+    [...entries].sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time)).forEach(e =>
+      rows.push([dmy(e.date), dayName(e.date), e.time, mealLabel(e.meal), e.sugar, e.sys, e.dia, e.food, e.insulin, e.meds, e.note]));
+    download('diari-kesihatan-'+todayStr()+'.csv', '﻿'+rows.map(r => r.map(q).join(',')).join('\n'), 'text/csv');
+  };
+  $('importBtn').onclick = () => $('importFile').click();
+  $('importFile').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const data = JSON.parse(r.result);
+        if (!Array.isArray(data)) throw 0;
+        const ids = new Set(entries.map(x => x.id));
+        const add = data.filter(x => x && x.id && x.date && x.time && !ids.has(x.id));
+        entries = entries.concat(add); save(); renderDay();
+        toast('✅ '+add.length+' catatan dipulihkan');
+      } catch(_){ alert('Fail tidak sah.'); }
+    };
+    r.readAsText(f); e.target.value = '';
+  };
+
+  renderDay();
+})();
+</script>
+</body>
+</html>
