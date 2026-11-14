@@ -59,6 +59,29 @@
   .profile .pg b{display:block;font-size:.85rem;white-space:nowrap}
   .profile .pg small{color:var(--muted);font-size:.7rem}
   .profile .pe{color:var(--muted)}
+  /* tabs: icon above label so 5 fit on a phone */
+  .tabs{gap:6px}
+  .tab{display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.72rem;line-height:1.2;padding:7px 1px;border-radius:12px}
+  .tab span{font-size:1.3rem;line-height:1.2}
+
+  /* summary */
+  .stype{display:flex;gap:8px;margin-bottom:12px}
+  .stype button{flex:1;padding:11px 4px;border-radius:12px;border:2px solid var(--line);background:#fff;font-weight:800;font-size:.9rem}
+  .stype button[aria-pressed="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .sblock h3{margin:0 0 8px;font-size:1.05rem}
+  .sblock .stats{margin-top:6px}
+  .sblock .stats:first-of-type{margin-top:0}
+  .delta{font-size:.8rem;color:var(--muted);margin-top:8px}
+  .mrow{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.95rem}
+  .mrow:last-child{border:0}
+  .srow{padding:8px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+  .srow:last-child{border:0}
+  .brow{display:grid;grid-template-columns:1.25fr 1fr 1.2fr .9fr;gap:4px;width:100%;text-align:left;padding:9px 0;border:0;border-bottom:1px solid var(--line);background:none;font-size:.88rem;color:var(--ink)}
+  .brow.bh{font-weight:800;color:var(--muted);font-size:.72rem;cursor:default}
+  .brow:last-child{border-bottom:0}
+  .sbtns{display:flex;gap:8px;margin-bottom:14px}
+  .sbtns .btn{padding:12px 6px;font-size:.95rem}
+
   /* photos */
   .photos h3{margin:0 0 2px;font-size:1.05rem}
   .photos .sub{color:var(--muted);font-size:.8rem;margin-bottom:10px}
@@ -176,10 +199,11 @@
 
 <main>
   <div class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tab-hari" aria-selected="true">📅 Hari</button>
-    <button class="tab" role="tab" id="tab-graf" aria-selected="false">📈 Graf</button>
-    <button class="tab" role="tab" id="tab-sejarah" aria-selected="false">📚 Sejarah</button>
-    <button class="tab" role="tab" id="tab-lagi" aria-selected="false">⚙️ Lagi</button>
+    <button class="tab" role="tab" id="tab-hari" aria-selected="true"><span>📅</span>Hari</button>
+    <button class="tab" role="tab" id="tab-ringkas" aria-selected="false"><span>📋</span>Ringkasan</button>
+    <button class="tab" role="tab" id="tab-graf" aria-selected="false"><span>📈</span>Graf</button>
+    <button class="tab" role="tab" id="tab-sejarah" aria-selected="false"><span>📚</span>Sejarah</button>
+    <button class="tab" role="tab" id="tab-lagi" aria-selected="false"><span>⚙️</span>Lagi</button>
   </div>
 
   <!-- HARI -->
@@ -207,6 +231,31 @@
       <input type="file" id="photoFile" accept="image/*" multiple hidden>
       <div class="pgrid" id="pgrid"></div>
     </div>
+  </section>
+
+  <!-- RINGKASAN -->
+  <section id="view-ringkas" hidden>
+    <div class="stype" id="sType">
+      <button type="button" data-t="hari" aria-pressed="true">Harian</button>
+      <button type="button" data-t="minggu" aria-pressed="false">Mingguan</button>
+      <button type="button" data-t="bulan" aria-pressed="false">Bulanan</button>
+    </div>
+    <div class="card">
+      <div class="datebar" style="margin-bottom:0">
+        <button class="nav" id="sPrev" aria-label="Sebelumnya">‹</button>
+        <div class="mid">
+          <div class="d" id="sLabel" style="font-size:1.05rem"></div>
+          <div class="h" id="sSub"></div>
+        </div>
+        <button class="nav" id="sNext" aria-label="Seterusnya">›</button>
+      </div>
+    </div>
+    <div id="sumBody"></div>
+    <div class="sbtns" id="sBtns">
+      <button type="button" class="btn primary" id="sCopy">📋 Salin</button>
+      <button type="button" class="btn" id="sShare">WhatsApp</button>
+    </div>
+    <p class="info">Ini hanya ringkasan daripada catatan anda; sentiasa ikut nasihat doktor.</p>
   </section>
 
   <!-- GRAF -->
@@ -533,6 +582,179 @@
     }).join('');
   }
 
+  /* ---------- summary (harian / mingguan / bulanan) ---------- */
+  let sumType = 'hari', sumAnchor = todayStr();
+  const SUM_NAMA = { hari: 'Harian', minggu: 'Mingguan', bulan: 'Bulanan' };
+
+  function periodOf(type, a){
+    if (type === 'hari')
+      return { from: a, to: a, n: 1, label: dayName(a)+', '+longDate(a), prev: [addDays(a,-1), addDays(a,-1)], prevName: 'semalam' };
+    const d = parse(a);
+    if (type === 'minggu'){
+      const f = addDays(a, -((d.getDay() + 6) % 7)), t = addDays(f, 6);
+      return { from: f, to: t, n: 7, label: dmy(f)+' – '+dmy(t), prev: [addDays(f,-7), addDays(f,-1)], prevName: 'minggu lalu' };
+    }
+    const y = d.getFullYear(), m = d.getMonth();
+    return { from: fmt(new Date(y,m,1)), to: fmt(new Date(y,m+1,0)), n: new Date(y,m+1,0).getDate(),
+      label: BULAN[m]+' '+y, prev: [fmt(new Date(y,m-1,1)), fmt(new Date(y,m,0))], prevName: 'bulan lalu' };
+  }
+  function shiftAnchor(type, a, dir){
+    if (type === 'hari') return addDays(a, dir);
+    if (type === 'minggu') return addDays(a, 7*dir);
+    const d = parse(a); return fmt(new Date(d.getFullYear(), d.getMonth()+dir, 1));
+  }
+  const avgOf = a => a.length ? a.reduce((x,y) => x+y, 0) / a.length : null;
+  const f1 = v => v == null ? '–' : String(Math.round(v*10)/10);
+  const f0 = v => v == null ? '–' : String(Math.round(v));
+  const minOf = a => a.length ? Math.min(...a) : null;
+  const maxOf = a => a.length ? Math.max(...a) : null;
+  function inRange(from, to){
+    return entries.filter(e => e.date >= from && e.date <= to).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+  }
+  function statsOf(list){
+    const sg = list.filter(e => e.sugar != null), bp = list.filter(e => e.sys != null);
+    const sv = sg.map(e => e.sugar), cl = sg.map(e => sugarClass(e.sugar, e.meal)[0]);
+    const ins = list.filter(e => e.insulin != null);
+    const meds = {};
+    list.forEach(e => (e.meds || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean).forEach(m => {
+      const k = m.toLowerCase(); (meds[k] = meds[k] || { name: m, n: 0 }).n++;
+    }));
+    return {
+      n: list.length, days: new Set(list.map(e => e.date)).size,
+      sg: { n: sv.length, avg: avgOf(sv), min: minOf(sv), max: maxOf(sv),
+        avgB: avgOf(sg.filter(e => e.meal === 'sebelum').map(e => e.sugar)),
+        avgA: avgOf(sg.filter(e => e.meal === 'selepas').map(e => e.sugar)),
+        ok: cl.filter(c => c === 'ok').length, low: cl.filter(c => c === 'low').length,
+        high: cl.filter(c => c === 'warn' || c === 'bad').length },
+      bp: { n: bp.length, sys: avgOf(bp.map(e => e.sys)), dia: avgOf(bp.map(e => e.dia)),
+        maxS: maxOf(bp.map(e => e.sys)), maxD: maxOf(bp.map(e => e.dia)),
+        minS: minOf(bp.map(e => e.sys)), minD: minOf(bp.map(e => e.dia)),
+        high: bp.filter(e => bpClass(e.sys, e.dia)[0] === 'bad').length },
+      ins: { total: ins.reduce((a,e) => a + e.insulin, 0), n: ins.length, days: new Set(ins.map(e => e.date)).size },
+      meds: Object.values(meds).sort((a,b) => b.n - a.n)
+    };
+  }
+  function deltaTxt(cur, prev, name, digits){
+    if (cur == null || prev == null) return '';
+    const d = cur - prev;
+    if (Math.abs(d) < Math.pow(10, -digits) / 2) return '＝ sama seperti '+name;
+    return (d > 0 ? '▲ ' : '▼ ')+Math.abs(d).toFixed(digits)+' berbanding '+name;
+  }
+  const pct = (a, b) => b ? Math.round(a / b * 100)+'%' : '–';
+
+  function entryParts(e, forText){
+    const p = [];
+    if (e.sugar != null) p.push('Gula '+e.sugar);
+    if (e.sys != null) p.push('BP '+e.sys+'/'+e.dia);
+    if (e.insulin != null) p.push('Insulin '+e.insulin+'u');
+    if (e.food) p.push('Makan: '+(forText ? e.food : esc(e.food)));
+    if (e.meds) p.push('Ubat: '+(forText ? e.meds : esc(e.meds)));
+    if (e.note) p.push(forText ? e.note : esc(e.note));
+    return p;
+  }
+
+  function renderSummary(){
+    document.querySelectorAll('#sType button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === sumType));
+    const P = periodOf(sumType, sumAnchor), list = inRange(P.from, P.to), S = statsOf(list);
+    const PS = statsOf(inRange(P.prev[0], P.prev[1]));
+    const t = todayStr();
+    $('sLabel').textContent = P.label;
+    $('sSub').textContent = (P.from <= t && t <= P.to) ? (sumType === 'hari' ? 'Hari ini' : (sumType === 'minggu' ? 'Minggu ini' : 'Bulan ini')) : '';
+
+    if (!list.length){
+      $('sumBody').innerHTML = '<div class="card empty"><div class="big">📋</div><div>Tiada catatan dalam tempoh ini.</div></div>';
+      $('sBtns').hidden = true;
+      return;
+    }
+    $('sBtns').hidden = false;
+    let h = '';
+
+    h += '<div class="card sblock"><div class="stats">' +
+      stat('Bacaan', S.n) + stat('Hari dicatat', S.days + (P.n > 1 ? '/'+P.n : '')) + '<div><b id="sPhotos">…</b><small>Gambar</small></div></div></div>';
+
+    if (S.sg.n){
+      h += '<div class="card sblock"><h3>🩸 Gula dalam darah <span class="hint" style="font-weight:400">(mmol/L)</span></h3>' +
+        '<div class="stats">'+stat('Purata', f1(S.sg.avg))+stat('Terendah', f1(S.sg.min))+stat('Tertinggi', f1(S.sg.max))+stat('Bacaan', S.sg.n)+'</div>' +
+        '<div class="stats">'+stat('Purata sebelum makan', f1(S.sg.avgB))+stat('Purata selepas makan', f1(S.sg.avgA))+'</div>' +
+        '<div class="stats">'+stat('Dalam sasaran', pct(S.sg.ok, S.sg.n))+stat('Rendah', S.sg.low+'×')+stat('Tinggi', S.sg.high+'×')+'</div>' +
+        (deltaTxt(S.sg.avg, PS.sg.avg, P.prevName, 1) ? '<div class="delta">Purata gula: '+deltaTxt(S.sg.avg, PS.sg.avg, P.prevName, 1)+'</div>' : '') + '</div>';
+    }
+    if (S.bp.n){
+      h += '<div class="card sblock"><h3>❤️ Darah tinggi <span class="hint" style="font-weight:400">(mmHg)</span></h3>' +
+        '<div class="stats">'+stat('Purata', f0(S.bp.sys)+'/'+f0(S.bp.dia))+stat('Tertinggi', S.bp.maxS+'/'+S.bp.maxD)+stat('Terendah', S.bp.minS+'/'+S.bp.minD)+stat('Bacaan', S.bp.n)+'</div>' +
+        '<div class="stats">'+stat('Tinggi (≥140/90)', S.bp.high+'×')+'</div>' +
+        (deltaTxt(S.bp.sys, PS.bp.sys, P.prevName, 0) ? '<div class="delta">Purata atas: '+deltaTxt(S.bp.sys, PS.bp.sys, P.prevName, 0)+'</div>' : '') + '</div>';
+    }
+    if (S.ins.n){
+      h += '<div class="card sblock"><h3>💉 Insulin</h3><div class="stats">' +
+        stat('Jumlah', f1(S.ins.total)+' u')+stat('Purata sehari', f1(S.ins.total / S.ins.days)+' u')+stat('Kali', S.ins.n)+'</div></div>';
+    }
+    if (S.meds.length){
+      h += '<div class="card sblock"><h3>💊 Ubat</h3>' +
+        S.meds.map(m => '<div class="mrow"><span>'+esc(m.name)+'</span><b>'+m.n+'×</b></div>').join('') + '</div>';
+    }
+
+    if (sumType === 'hari'){
+      h += '<div class="card sblock"><h3>🕐 Catatan hari ini</h3>' + list.map(e =>
+        '<div class="srow"><b>'+time12(e.time)+'</b>'+(e.meal ? ' · '+mealLabel(e.meal) : '')+'<br>'+(entryParts(e).join(' · ') || '–')+'</div>').join('') + '</div>';
+    } else {
+      const days = [...new Set(list.map(e => e.date))];
+      h += '<div class="card sblock"><h3>🗓️ Pecahan harian</h3>' +
+        '<div class="brow bh"><span>Tarikh</span><span>Gula (purata)</span><span>Darah (purata)</span><span>Insulin</span></div>' +
+        days.map(d => {
+          const l = list.filter(e => e.date === d), s = statsOf(l);
+          return '<button type="button" class="brow" data-day="'+d+'"><span>'+dayName(d).slice(0,3)+' '+pad(parse(d).getDate())+'/'+pad(parse(d).getMonth()+1)+'</span>' +
+            '<span>'+f1(s.sg.avg)+'</span><span>'+(s.bp.n ? f0(s.bp.sys)+'/'+f0(s.bp.dia) : '–')+'</span><span>'+(s.ins.n ? f1(s.ins.total)+' u' : '–')+'</span></button>';
+        }).join('') + '</div>';
+    }
+    $('sumBody').innerHTML = h;
+
+    // photo count (async, from IndexedDB)
+    dbCounts().then(c => {
+      const el = $('sPhotos'); if (!el) return;
+      el.textContent = Object.keys(c).filter(d => d >= P.from && d <= P.to).reduce((a,d) => a + c[d], 0);
+    }).catch(() => { const el = $('sPhotos'); if (el) el.textContent = '–'; });
+  }
+
+  function periodText(type, anchor){
+    const P = periodOf(type, anchor), list = inRange(P.from, P.to), S = statsOf(list);
+    let o = '📋 Ringkasan '+SUM_NAMA[type]+' — '+P.label+'\n';
+    if (profileLine()) o += '👤 '+profileLine()+'\n';
+    if (!list.length) return o + '\nTiada catatan.';
+    o += '\nCatatan: '+S.n+' bacaan, '+S.days+(P.n > 1 ? '/'+P.n : '')+' hari\n';
+    if (S.sg.n){
+      o += '\n🩸 Gula (mmol/L)\n• Purata '+f1(S.sg.avg)+' (terendah '+f1(S.sg.min)+', tertinggi '+f1(S.sg.max)+')\n';
+      if (S.sg.avgB != null || S.sg.avgA != null) o += '• Sebelum makan '+f1(S.sg.avgB)+' | Selepas makan '+f1(S.sg.avgA)+'\n';
+      o += '• Dalam sasaran '+pct(S.sg.ok, S.sg.n)+' | Rendah '+S.sg.low+'× | Tinggi '+S.sg.high+'×\n';
+    }
+    if (S.bp.n){
+      o += '\n❤️ Darah tinggi (mmHg)\n• Purata '+f0(S.bp.sys)+'/'+f0(S.bp.dia)+' (tertinggi '+S.bp.maxS+'/'+S.bp.maxD+', terendah '+S.bp.minS+'/'+S.bp.minD+')\n• Bacaan tinggi (≥140/90): '+S.bp.high+'×\n';
+    }
+    if (S.ins.n) o += '\n💉 Insulin\n• Jumlah '+f1(S.ins.total)+' unit | Purata '+f1(S.ins.total / S.ins.days)+' unit/hari\n';
+    if (S.meds.length) o += '\n💊 Ubat\n'+S.meds.map(m => '• '+m.name+' ('+m.n+'×)').join('\n')+'\n';
+    if (type === 'hari'){
+      o += '\n🕐 Catatan\n'+list.map(e => '• '+time12(e.time)+(e.meal ? ' '+mealLabel(e.meal) : '')+': '+(entryParts(e, true).join(' | ') || '–')).join('\n')+'\n';
+    }
+    return o;
+  }
+
+  $('sType').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    sumType = b.dataset.t; renderSummary();
+  });
+  $('sPrev').onclick = () => { sumAnchor = shiftAnchor(sumType, sumAnchor, -1); renderSummary(); };
+  $('sNext').onclick = () => { sumAnchor = shiftAnchor(sumType, sumAnchor, 1); renderSummary(); };
+  $('sumBody').addEventListener('click', e => {
+    const b = e.target.closest('[data-day]'); if (!b) return;
+    currentDate = b.dataset.day; showTab('hari');
+  });
+  $('sCopy').onclick = async () => {
+    const t = periodText(sumType, sumAnchor);
+    try { await navigator.clipboard.writeText(t); toast('✅ Disalin. Tampal di WhatsApp.'); }
+    catch(e){ prompt('Salin teks ini:', t); }
+  };
+  $('sShare').onclick = () => window.open('https://wa.me/?text='+encodeURIComponent(periodText(sumType, sumAnchor)), '_blank');
+
   /* ---------- charts ---------- */
   let rangeDays = 7;
   const W = 340, H = 200, PL = 34, PR = 10, PT = 10, PB = 26;
@@ -782,13 +1004,14 @@
 
   /* ---------- tabs ---------- */
   function showTab(name){
-    ['hari','graf','sejarah','lagi'].forEach(n => {
+    ['hari','ringkas','graf','sejarah','lagi'].forEach(n => {
       $('view-'+n).hidden = n !== name;
       $('tab-'+n).setAttribute('aria-selected', n === name);
     });
     $('add').style.display = name === 'lagi' ? 'none' : '';
     if (name === 'sejarah') renderHistory();
     if (name === 'graf') renderCharts();
+    if (name === 'ringkas') renderSummary();
     if (name === 'hari') renderDay();
     window.scrollTo(0,0);
   }
@@ -868,6 +1091,7 @@
     if (b){ currentDate = b.dataset.day; showTab('hari'); }
   });
   $('tab-hari').onclick = () => showTab('hari');
+  $('tab-ringkas').onclick = () => { sumAnchor = currentDate; showTab('ringkas'); };
   $('tab-graf').onclick = () => showTab('graf');
   $('tab-sejarah').onclick = () => showTab('sejarah');
   $('tab-lagi').onclick = () => showTab('lagi');
