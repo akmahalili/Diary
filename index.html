@@ -59,6 +59,18 @@
   .profile .pg b{display:block;font-size:.85rem;white-space:nowrap}
   .profile .pg small{color:var(--muted);font-size:.7rem}
   .profile .pe{color:var(--muted)}
+  /* photos */
+  .photos h3{margin:0 0 2px;font-size:1.05rem}
+  .photos .sub{color:var(--muted);font-size:.8rem;margin-bottom:10px}
+  .pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+  .pgrid button{padding:0;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:#f2f0ea;aspect-ratio:1;position:relative}
+  .pgrid img{width:100%;height:100%;object-fit:cover;display:block}
+  .pgrid .cap{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:.65rem;padding:2px 4px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .photos .addp{display:block;width:100%;padding:14px;border-radius:12px;border:2px dashed var(--brand);background:var(--brand-soft);color:var(--brand-dark);font-weight:800;font-size:1.05rem}
+  .viewer{background:#111;color:#fff}
+  .viewer img{width:100%;max-height:60vh;object-fit:contain;display:block;border-radius:12px;background:#000}
+  .viewer .meta{margin:8px 0;font-size:.85rem;opacity:.85}
+  .viewer input{margin-bottom:4px}
   .nochart{text-align:center;color:var(--muted);padding:22px 8px;font-size:.95rem}
   main{max-width:720px;margin:0 auto;padding:14px 14px 0}
   button{font:inherit;cursor:pointer}
@@ -187,6 +199,14 @@
     </div>
     <div class="sum" id="sum"></div>
     <div id="entries"></div>
+
+    <div class="card photos" id="photoCard">
+      <h3>📷 Gambar Hari Ini</h3>
+      <div class="sub">Simpan gambar kemajuan harian (makanan, luka, bacaan alat, dll.).</div>
+      <button type="button" class="addp" id="addPhoto">📷 Tambah Gambar</button>
+      <input type="file" id="photoFile" accept="image/*" multiple hidden>
+      <div class="pgrid" id="pgrid"></div>
+    </div>
   </section>
 
   <!-- GRAF -->
@@ -291,6 +311,21 @@
       <button type="submit" class="btn primary">Simpan</button>
     </div>
   </form>
+</div>
+
+<!-- GAMBAR -->
+<div class="overlay" id="vOverlay" role="dialog" aria-modal="true">
+  <div class="sheet viewer">
+    <img id="vImg" alt="Gambar kemajuan">
+    <div class="meta" id="vMeta"></div>
+    <label class="f" for="vCap">Keterangan</label>
+    <input type="text" id="vCap" placeholder="cth: Luka kaki, makan tengah hari">
+    <div class="btnrow">
+      <button type="button" class="btn danger" id="vDel">🗑️ Padam</button>
+      <button type="button" class="btn" id="vSave">Simpan</button>
+      <button type="button" class="btn primary" id="vClose">Tutup</button>
+    </div>
+  </div>
 </div>
 
 <!-- PROFIL -->
@@ -426,6 +461,7 @@
     $('dLabel').textContent = longDate(currentDate);
     $('hLabel').textContent = dayName(currentDate) + (currentDate === todayStr() ? ' · Hari ini' : '');
     $('dPick').value = currentDate;
+    renderPhotos();
 
     // paper-style weekday boxes
     const wd = (parse(currentDate).getDay() + 6) % 7; // Mon=0
@@ -476,7 +512,10 @@
 
   /* ---------- render: Sejarah ---------- */
   function renderHistory(){
-    const days = [...new Set(entries.map(e => e.date))].sort().reverse();
+    dbCounts().catch(() => ({})).then(renderHistoryWith);
+  }
+  function renderHistoryWith(counts){
+    const days = [...new Set(entries.map(e => e.date).concat(Object.keys(counts)))].sort().reverse();
     if (!days.length){
       $('history').innerHTML = '<div class="card empty"><div class="big">📚</div><div>Belum ada sejarah catatan.</div></div>';
       return;
@@ -486,7 +525,7 @@
       const s = l.filter(e => e.sugar != null).map(e => e.sugar);
       const b = l.filter(e => e.sys != null);
       return '<button class="hday" data-day="'+d+'">' +
-        '<div class="l"><b>'+dayName(d)+', '+dmy(d)+'</b><small>'+l.length+' bacaan</small></div>' +
+        '<div class="l"><b>'+dayName(d)+', '+dmy(d)+'</b><small>'+l.length+' bacaan'+(counts[d] ? ' · 📷 '+counts[d] : '')+'</small></div>' +
         '<div class="r">' +
           (s.length ? 'Gula: <b>'+Math.min(...s)+(s.length>1?' – '+Math.max(...s):'')+'</b><br>' : '') +
           (b.length ? 'Darah: <b>'+b[b.length-1].sys+'/'+b[b.length-1].dia+'</b>' : '') +
@@ -591,6 +630,105 @@
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+
+  /* ---------- photos (IndexedDB) ---------- */
+  let _db = null;
+  function dbOpen(){
+    if (_db) return Promise.resolve(_db);
+    return new Promise((res, rej) => {
+      if (!window.indexedDB) return rej(new Error('no idb'));
+      const r = indexedDB.open('diariKesihatanDB', 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore('photos', {keyPath:'id'}).createIndex('date','date'); };
+      r.onsuccess = () => { _db = r.result; res(_db); };
+      r.onerror = () => rej(r.error);
+      r.onblocked = () => rej(new Error('blocked'));
+    });
+  }
+  function dbTx(mode, fn){
+    return dbOpen().then(db => new Promise((res, rej) => {
+      const t = db.transaction('photos', mode);
+      let req;
+      try { req = fn(t.objectStore('photos')); } catch(e){ rej(e); return; }
+      t.oncomplete = () => res(req && req.result);
+      t.onerror = t.onabort = () => rej(t.error);
+    }));
+  }
+  const dbPut = rec => dbTx('readwrite', s => s.put(rec));
+  const dbDelete = id => dbTx('readwrite', s => s.delete(id));
+  const dbAll = () => dbTx('readonly', s => s.getAll());
+  const dbByDate = d => dbTx('readonly', s => s.index('date').getAll(IDBKeyRange.only(d)));
+  function dbCounts(){
+    return dbOpen().then(db => new Promise((res, rej) => {
+      const c = {};
+      const r = db.transaction('photos').objectStore('photos').index('date').openKeyCursor();
+      r.onsuccess = () => { const cur = r.result; if (cur){ c[cur.key] = (c[cur.key]||0)+1; cur.continue(); } else res(c); };
+      r.onerror = () => rej(r.error);
+    }));
+  }
+  function resizeImage(file, max, q){
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', q));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+      img.src = url;
+    });
+  }
+  let dayPhotos = [], viewing = null, photoToken = 0;
+  function renderPhotos(){
+    const tok = ++photoToken, d = currentDate;
+    dbByDate(d).then(list => {
+      if (tok !== photoToken) return;
+      dayPhotos = list.sort((a,b) => (a.time||'').localeCompare(b.time||''));
+      $('pgrid').innerHTML = dayPhotos.map(p =>
+        '<button type="button" data-pid="'+esc(p.id)+'" aria-label="Buka gambar"><img src="'+p.data+'" alt="">' +
+        (p.caption ? '<span class="cap">'+esc(p.caption)+'</span>' : '') + '</button>').join('');
+    }).catch(() => {
+      if (tok !== photoToken) return;
+      $('pgrid').innerHTML = '<div class="info" style="grid-column:1/-1">Gambar tidak boleh disimpan pada pelayar ini.</div>';
+      $('addPhoto').disabled = true;
+    });
+  }
+  $('addPhoto').onclick = () => $('photoFile').click();
+  $('photoFile').onchange = async ev => {
+    const files = [...ev.target.files]; ev.target.value = '';
+    if (!files.length) return;
+    let n = 0;
+    for (const f of files){
+      try {
+        const data = await resizeImage(f, 1000, 0.72);
+        await dbPut({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), date: currentDate, time: nowTime(), caption: '', data });
+        n++;
+      } catch(e){ toast('Gambar tidak dapat disimpan.'); }
+    }
+    if (n){ renderPhotos(); toast('✅ '+n+' gambar disimpan'); }
+  };
+  $('pgrid').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-pid]'); if (!b) return;
+    viewing = dayPhotos.find(p => p.id === b.dataset.pid); if (!viewing) return;
+    $('vImg').src = viewing.data;
+    $('vMeta').textContent = dayName(viewing.date)+', '+dmy(viewing.date)+(viewing.time ? ' · '+time12(viewing.time) : '');
+    $('vCap').value = viewing.caption || '';
+    $('vOverlay').classList.add('open'); document.body.style.overflow = 'hidden';
+  });
+  function closeViewer(){ $('vOverlay').classList.remove('open'); document.body.style.overflow = ''; viewing = null; $('vImg').removeAttribute('src'); }
+  $('vClose').onclick = closeViewer;
+  $('vOverlay').addEventListener('click', e => { if (e.target === $('vOverlay')) closeViewer(); });
+  $('vSave').onclick = () => {
+    if (!viewing) return;
+    dbPut(Object.assign({}, viewing, { caption: $('vCap').value.trim() }))
+      .then(() => { closeViewer(); renderPhotos(); toast('✅ Disimpan'); })
+      .catch(() => toast('Gagal menyimpan.'));
+  };
+  $('vDel').onclick = () => {
+    if (!viewing || !confirm('Padam gambar ini?')) return;
+    dbDelete(viewing.id).then(() => { closeViewer(); renderPhotos(); toast('Dipadam'); }).catch(() => toast('Gagal memadam.'));
+  };
 
   /* ---------- profile ---------- */
   let sex = '';
@@ -782,7 +920,11 @@
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
     currentDate = prevDate;
   };
-  $('export').onclick = () => download('diari-kesihatan-'+todayStr()+'.json', JSON.stringify({profile, entries},null,2), 'application/json');
+  $('export').onclick = async () => {
+    let photos = [];
+    try { photos = await dbAll(); } catch(e){}
+    download('diari-kesihatan-'+todayStr()+'.json', JSON.stringify({profile, entries, photos}), 'application/json');
+  };
   $('csv').onclick = () => {
     const q = v => '"'+String(v ?? '').replace(/"/g,'""')+'"';
     const rows = [['Tarikh','Hari','Waktu','Sebelum/Selepas Makan','Gula (mmol/L)','Atas (sistolik)','Bawah (diastolik)','Makan apa','Insulin (unit)','Ubat','Catatan']];
@@ -796,8 +938,9 @@
     const r = new FileReader();
     r.onload = () => {
       try {
-        let data = JSON.parse(r.result);
+        let data = JSON.parse(r.result), importPhotos = [];
         if (data && !Array.isArray(data) && typeof data === 'object'){
+          if (Array.isArray(data.photos)) importPhotos = data.photos.filter(p => p && p.id && p.date && p.data);
           // newer backups: { profile, entries }
           if (data.profile && typeof data.profile === 'object' && !profileLine()){ profile = data.profile; saveProfile(); renderProfile(); }
           data = data.entries;
@@ -805,8 +948,11 @@
         if (!Array.isArray(data)) throw 0;
         const ids = new Set(entries.map(x => x.id));
         const add = data.filter(x => x && x.id && x.date && x.time && !ids.has(x.id));
-        entries = entries.concat(add); save(); renderDay();
-        toast('✅ '+add.length+' catatan dipulihkan');
+        entries = entries.concat(add); save();
+        Promise.all(importPhotos.map(dbPut)).catch(() => {}).then(() => {
+          renderDay();
+          toast('✅ '+add.length+' catatan'+(importPhotos.length ? ', '+importPhotos.length+' gambar' : '')+' dipulihkan');
+        });
       } catch(_){ alert('Fail tidak sah.'); }
     };
     r.readAsText(f); e.target.value = '';
