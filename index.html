@@ -266,9 +266,15 @@
       </div>
     </div>
     <div id="sumBody"></div>
-    <div class="sbtns" id="sBtns">
-      <button type="button" class="btn primary" id="sCopy">📋 Salin</button>
-      <button type="button" class="btn" id="sShare">WhatsApp</button>
+    <div id="sBtns">
+      <div class="sbtns">
+        <button type="button" class="btn primary" id="sImg">🖼️ Gambar</button>
+        <button type="button" class="btn primary" id="sPdf">📄 PDF</button>
+      </div>
+      <div class="sbtns">
+        <button type="button" class="btn" id="sCopy">📋 Salin teks</button>
+        <button type="button" class="btn" id="sShare">WhatsApp</button>
+      </div>
     </div>
     <p class="info">Ini hanya ringkasan daripada catatan anda; sentiasa ikut nasihat doktor.</p>
   </section>
@@ -783,6 +789,157 @@
     catch(e){ prompt('Salin teks ini:', t); }
   };
   $('sShare').onclick = () => window.open('https://wa.me/?text='+encodeURIComponent(periodText(sumType, sumAnchor)), '_blank');
+
+  /* ---------- summary as image / PDF ---------- */
+  function drawSummary(ctx, W, type, anchor){
+    const P = periodOf(type, anchor), list = inRange(P.from, P.to), S = statsOf(list);
+    const PS = statsOf(inRange(P.prev[0], P.prev[1]));
+    const C = { ink:'#1f2933', muted:'#5f6b76', brand:'#0f766e', soft:'#d7efec', bad:'#b42318', badBg:'#fde2df', box:'#f2f0ea', line:'#d9d4c7' };
+    const M = 28, FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+    let y = 0;
+    const font = (sz, w) => { ctx.font = (w || '400')+' '+sz+'px '+FONT; };
+    const text = (t, x, yy, sz, w, col, al) => { font(sz, w); ctx.fillStyle = col || C.ink; ctx.textAlign = al || 'left'; ctx.fillText(t, x, yy); };
+    const wrap = (t, x, maxW, sz, w, col, lh) => {
+      font(sz, w); ctx.fillStyle = col; ctx.textAlign = 'left';
+      let line = '';
+      t.split(' ').forEach(wd => {
+        const test = line ? line+' '+wd : wd;
+        if (ctx.measureText(test).width > maxW && line){ ctx.fillText(line, x, y); y += lh; line = wd; } else line = test;
+      });
+      if (line){ ctx.fillText(line, x, y); y += lh; }
+    };
+    const title = t => { y += 22; ctx.fillStyle = C.brand; ctx.fillRect(M, y-17, 5, 22); text(t, M+14, y, 19, '800', C.ink); y += 16; };
+    const boxes = items => {
+      const gap = 10, w = (W - 2*M - gap*(items.length-1)) / items.length, h = 62;
+      items.forEach((it, i) => {
+        const x = M + i*(w+gap);
+        ctx.fillStyle = it.bad ? C.badBg : C.box; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, 10); else ctx.rect(x, y, w, h); ctx.fill();
+        text(String(it.v), x + w/2, y + 28, 22, '800', it.bad ? C.bad : C.ink, 'center');
+        text(it.l, x + w/2, y + 49, 12, '500', C.muted, 'center');
+      });
+      y += h + 10;
+    };
+    const note = t => { text(t, M, y+12, 13, '500', C.muted); y += 22; };
+
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, 9999);
+    ctx.fillStyle = C.brand; ctx.fillRect(0, 0, W, 98);
+    text('Diari Kesihatan', M, 44, 28, '800', '#fff');
+    text('Ringkasan '+SUM_NAMA[type]+'  ·  '+P.label, M, 76, 17, '600', C.soft);
+    y = 98 + 30;
+    if (profileLine()) wrap(profileLine(), M, W - 2*M, 16, '700', C.ink, 22);
+    if (!list.length){ y += 20; text('Tiada catatan dalam tempoh ini.', M, y, 17, '500', C.muted); return y + 40; }
+    y += 4;
+    boxes([{l:'Bacaan', v:S.n}, {l:'Hari dicatat', v:S.days + (P.n > 1 ? '/'+P.n : '')}]);
+
+    if (S.sg.n){
+      title('Gula dalam darah (mmol/L)');
+      boxes([{l:'Purata', v:f1(S.sg.avg)}, {l:'Terendah', v:f1(S.sg.min), bad:S.sg.min < 4}, {l:'Tertinggi', v:f1(S.sg.max)}, {l:'Bacaan', v:S.sg.n}]);
+      boxes([{l:'Purata sebelum makan', v:f1(S.sg.avgB)}, {l:'Purata selepas makan', v:f1(S.sg.avgA)}]);
+      boxes([{l:'Dalam sasaran', v:pct(S.sg.ok, S.sg.n)}, {l:'Rendah', v:S.sg.low+'×', bad:S.sg.low > 0}, {l:'Tinggi', v:S.sg.high+'×', bad:S.sg.high > 0}]);
+      const dl = deltaTxt(S.sg.avg, PS.sg.avg, P.prevName, 1); if (dl) note('Purata gula: '+dl);
+    }
+    if (S.bp.n){
+      title('Darah tinggi (mmHg)');
+      boxes([{l:'Purata', v:f0(S.bp.sys)+'/'+f0(S.bp.dia)}, {l:'Tertinggi', v:S.bp.maxS+'/'+S.bp.maxD}, {l:'Terendah', v:S.bp.minS+'/'+S.bp.minD}, {l:'Bacaan', v:S.bp.n}]);
+      boxes([{l:'Tinggi (≥140/90)', v:S.bp.high+'×', bad:S.bp.high > 0}]);
+      const dl = deltaTxt(S.bp.sys, PS.bp.sys, P.prevName, 0); if (dl) note('Purata atas: '+dl);
+    }
+    if (S.ins.n){
+      title('Insulin');
+      boxes([{l:'Jumlah', v:f1(S.ins.total)+' u'}, {l:'Purata sehari', v:f1(S.ins.total / S.ins.days)+' u'}, {l:'Kali', v:S.ins.n}]);
+    }
+    if (S.meds.length){
+      title('Ubat');
+      S.meds.forEach(m => { y += 6; text(m.name, M, y+14, 16, '500', C.ink); text(m.n+'×', W-M, y+14, 16, '800', C.ink, 'right'); y += 22; });
+      y += 6;
+    }
+    if (type === 'hari'){
+      title('Catatan hari ini');
+      list.forEach(e => {
+        const hot = anyAlert(e);
+        y += 8;
+        text(time12(e.time)+(e.meal ? '  ·  '+mealLabel(e.meal) : ''), M, y+12, 15, '800', hot ? C.bad : C.ink); y += 20;
+        y += 2; wrap(entryParts(e, true).join('  ·  ') || '–', M, W - 2*M, 14, '400', hot ? C.bad : C.muted, 19);
+        ctx.fillStyle = C.line; ctx.fillRect(M, y, W - 2*M, 1); y += 2;
+      });
+    } else {
+      title('Pecahan harian');
+      const cx = [M, M+150, M+290, M+450];
+      y += 6;
+      ['Tarikh','Gula (purata)','Darah (purata)','Insulin'].forEach((h, i) => text(h, cx[i], y+12, 12, '800', C.muted));
+      y += 20;
+      [...new Set(list.map(e => e.date))].forEach(d => {
+        const l = list.filter(e => e.date === d), s = statsOf(l), hot = l.some(anyAlert);
+        const col = hot ? C.bad : C.ink;
+        text(dayName(d).slice(0,3)+' '+pad(parse(d).getDate())+'/'+pad(parse(d).getMonth()+1)+(hot ? ' !!!' : ''), cx[0], y+14, 15, hot ? '800' : '500', col);
+        text(f1(s.sg.avg), cx[1], y+14, 15, '500', col);
+        text(s.bp.n ? f0(s.bp.sys)+'/'+f0(s.bp.dia) : '–', cx[2], y+14, 15, '500', col);
+        text(s.ins.n ? f1(s.ins.total)+' u' : '–', cx[3], y+14, 15, '500', col);
+        y += 26; ctx.fillStyle = C.line; ctx.fillRect(M, y-4, W - 2*M, 1);
+      });
+    }
+    y += 18;
+    wrap('!!! = bacaan tinggi atau rendah. Ini hanya ringkasan daripada catatan sendiri; sentiasa ikut nasihat doktor.', M, W - 2*M, 12, '400', C.muted, 17);
+    text('Dijana '+dmy(todayStr())+' '+time12(nowTime()), M, y+4, 12, '400', C.muted);
+    return y + 4 + M;
+  }
+  function summaryCanvas(){
+    const W = 720, SC = 2;
+    const probe = document.createElement('canvas'); probe.width = W; probe.height = 9999;
+    const h = Math.ceil(drawSummary(probe.getContext('2d'), W, sumType, sumAnchor));
+    const cv = document.createElement('canvas'); cv.width = W*SC; cv.height = h*SC;
+    const c = cv.getContext('2d'); c.scale(SC, SC);
+    drawSummary(c, W, sumType, sumAnchor);
+    return { cv, W, h };
+  }
+  function makePdf(jpg, wpx, hpx, pw, ph){
+    const enc = new TextEncoder(), parts = [], offs = [];
+    let len = 0;
+    const push = b => { const u = typeof b === 'string' ? enc.encode(b) : b; parts.push(u); len += u.length; };
+    const obj = (n, body) => { offs[n] = len; push(n+' 0 obj\n'+body+'\nendobj\n'); };
+    push('%PDF-1.4\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pw+' '+ph+'] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+    offs[4] = len;
+    push('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+wpx+' /Height '+hpx+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpg.length+' >>\nstream\n');
+    push(jpg); push('\nendstream\nendobj\n');
+    const cs = 'q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';
+    obj(5, '<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream');
+    const xr = len;
+    let x = 'xref\n0 6\n0000000000 65535 f \n';
+    for (let i = 1; i <= 5; i++) x += String(offs[i]).padStart(10, '0')+' 00000 n \n';
+    push(x+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
+    return new Blob(parts, { type: 'application/pdf' });
+  }
+  async function exportSummary(kind){
+    const P = periodOf(sumType, sumAnchor);
+    if (!inRange(P.from, P.to).length){ toast('Tiada catatan dalam tempoh ini.'); return; }
+    try {
+      const { cv, W, h } = summaryCanvas();
+      const name = 'ringkasan-'+SUM_NAMA[sumType].toLowerCase()+'-'+P.from;
+      let blob, fname, mime;
+      if (kind === 'png'){
+        blob = await new Promise(r => cv.toBlob(r, 'image/png')); fname = name+'.png'; mime = 'image/png';
+      } else {
+        const jpg = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
+        const bytes = new Uint8Array(await jpg.arrayBuffer());
+        blob = makePdf(bytes, cv.width, cv.height, (W*0.75).toFixed(2), (h*0.75).toFixed(2)); fname = name+'.pdf'; mime = 'application/pdf';
+      }
+      const file = new File([blob], fname, { type: mime });
+      if (navigator.canShare && navigator.canShare({ files: [file] })){
+        try { await navigator.share({ files: [file], title: 'Ringkasan Diari Kesihatan' }); return; }
+        catch(e){ if (e && e.name === 'AbortError') return; }
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('✅ '+(kind === 'png' ? 'Gambar' : 'PDF')+' disimpan');
+    } catch(e){ toast('Gagal menjana fail.'); }
+  }
+  $('sImg').onclick = () => exportSummary('png');
+  $('sPdf').onclick = () => exportSummary('pdf');
 
   /* ---------- charts ---------- */
   let rangeDays = 7;
