@@ -50,6 +50,15 @@
   .stats small{color:var(--muted);font-size:.7rem}
   .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.75rem;color:var(--muted);margin-top:6px}
   .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+  /* profile */
+  .profile{display:block;width:100%;text-align:left;border:2px solid var(--line);background:#fff;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .profile .pn{font-size:1.15rem;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .profile .pn small{color:var(--brand);font-weight:700;font-size:.8rem;white-space:nowrap}
+  .profile .pg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}
+  .profile .pg div{background:#f2f0ea;border-radius:10px;padding:6px 2px;text-align:center}
+  .profile .pg b{display:block;font-size:.85rem;white-space:nowrap}
+  .profile .pg small{color:var(--muted);font-size:.7rem}
+  .profile .pe{color:var(--muted)}
   .nochart{text-align:center;color:var(--muted);padding:22px 8px;font-size:.95rem}
   main{max-width:720px;margin:0 auto;padding:14px 14px 0}
   button{font:inherit;cursor:pointer}
@@ -163,6 +172,7 @@
 
   <!-- HARI -->
   <section id="view-hari">
+    <button type="button" class="profile" id="profileCard" aria-label="Ubah maklumat diri"></button>
     <div class="card">
       <div class="datebar">
         <button class="nav" id="prev" aria-label="Hari sebelumnya">‹</button>
@@ -283,6 +293,47 @@
   </form>
 </div>
 
+<!-- PROFIL -->
+<div class="overlay" id="pOverlay" role="dialog" aria-modal="true">
+  <form class="sheet" id="pForm" autocomplete="off" novalidate>
+    <h2>Maklumat Diri</h2>
+
+    <label class="f" for="pName">Nama</label>
+    <input type="text" id="pName" placeholder="Nama penuh" autocapitalize="words">
+
+    <div class="row">
+      <div>
+        <label class="f" for="pAge">Umur <span class="hint">(tahun)</span></label>
+        <input type="number" id="pAge" inputmode="numeric" min="0" max="120" placeholder="cth: 60">
+      </div>
+      <div>
+        <label class="f">Jantina</label>
+        <div class="seg" id="segSex">
+          <button type="button" data-v="Perempuan" aria-pressed="false">Perempuan</button>
+          <button type="button" data-v="Lelaki" aria-pressed="false">Lelaki</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label class="f" for="pWeight">Berat <span class="hint">(kg)</span></label>
+        <input type="number" id="pWeight" inputmode="decimal" step="0.1" min="1" max="400" placeholder="cth: 65">
+      </div>
+      <div>
+        <label class="f" for="pHeight">Tinggi <span class="hint">(cm)</span></label>
+        <input type="number" id="pHeight" inputmode="decimal" step="0.1" min="30" max="260" placeholder="cth: 155">
+      </div>
+    </div>
+
+    <div class="err" id="pErr"></div>
+    <div class="btnrow">
+      <button type="button" class="btn" id="pCancel">Batal</button>
+      <button type="submit" class="btn primary">Simpan</button>
+    </div>
+  </form>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -294,6 +345,25 @@
   const BULAN = ['Januari','Februari','Mac','April','Mei','Jun','Julai','Ogos','September','Oktober','November','Disember'];
 
   const $ = id => document.getElementById(id);
+  const PKEY = 'diariKesihatan.profile';
+  let profile = loadProfile();
+  function loadProfile(){
+    try { const v = JSON.parse(localStorage.getItem(PKEY)); return v && typeof v === 'object' ? v : {}; }
+    catch(e){ return {}; }
+  }
+  function saveProfile(){
+    try { localStorage.setItem(PKEY, JSON.stringify(profile)); }
+    catch(e){ toast('Gagal menyimpan. Ruang telefon penuh?'); }
+  }
+  function profileLine(){
+    const p = profile, a = [];
+    if (p.name) a.push(p.name);
+    if (p.age != null) a.push('Umur '+p.age);
+    if (p.sex) a.push(p.sex);
+    if (p.weight != null) a.push(p.weight+' kg');
+    if (p.height != null) a.push(p.height+' cm');
+    return a.join(' | ');
+  }
   let entries = load();
   let currentDate = todayStr();
   let editingId = null;
@@ -522,6 +592,56 @@
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
+  /* ---------- profile ---------- */
+  let sex = '';
+  function renderProfile(){
+    const p = profile;
+    const has = p.name || p.age != null || p.sex || p.weight != null || p.height != null;
+    if (!has){
+      $('profileCard').innerHTML = '<div class="pn"><span class="pe">👤 Isi maklumat diri (nama, umur, berat…)</span><small>Isi ›</small></div>';
+      return;
+    }
+    const cell = (l, v) => '<div><b>'+v+'</b><small>'+l+'</small></div>';
+    $('profileCard').innerHTML =
+      '<div class="pn"><span>👤 '+(p.name ? esc(p.name) : 'Tiada nama')+'</span><small>Ubah ›</small></div>' +
+      '<div class="pg">' +
+        cell('Umur', p.age != null ? p.age+' thn' : '–') +
+        cell('Jantina', p.sex ? esc(p.sex) : '–') +
+        cell('Berat', p.weight != null ? p.weight+' kg' : '–') +
+        cell('Tinggi', p.height != null ? p.height+' cm' : '–') +
+      '</div>';
+  }
+  function setSex(v){
+    sex = v;
+    document.querySelectorAll('#segSex button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
+  }
+  $('profileCard').onclick = () => {
+    $('pName').value = profile.name || '';
+    $('pAge').value = profile.age != null ? profile.age : '';
+    $('pWeight').value = profile.weight != null ? profile.weight : '';
+    $('pHeight').value = profile.height != null ? profile.height : '';
+    setSex(profile.sex || '');
+    $('pErr').textContent = '';
+    $('pOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+  function closeProfile(){ $('pOverlay').classList.remove('open'); document.body.style.overflow = ''; }
+  $('pCancel').onclick = closeProfile;
+  $('pOverlay').addEventListener('click', e => { if (e.target === $('pOverlay')) closeProfile(); });
+  $('segSex').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (b) setSex(sex === b.dataset.v ? '' : b.dataset.v);
+  });
+  $('pForm').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const n = id => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+    const age = n('pAge'), weight = n('pWeight'), height = n('pHeight');
+    if (age != null && (age < 0 || age > 120)) { $('pErr').textContent = 'Umur nampak tidak betul.'; return; }
+    if (weight != null && (weight < 1 || weight > 400)) { $('pErr').textContent = 'Berat nampak tidak betul.'; return; }
+    if (height != null && (height < 30 || height > 260)) { $('pErr').textContent = 'Tinggi nampak tidak betul.'; return; }
+    profile = { name: $('pName').value.trim(), age, sex, weight, height };
+    saveProfile(); closeProfile(); renderProfile(); toast('✅ Disimpan');
+  });
+
   /* ---------- tabs ---------- */
   function showTab(name){
     ['hari','graf','sejarah','lagi'].forEach(n => {
@@ -620,6 +740,7 @@
     const list = entries.filter(e => e.date >= from).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
     if (!list.length) return 'Tiada catatan.';
     let out = '📋 Diari Kesihatan ('+dmy(from)+' – '+dmy(todayStr())+')\n';
+    if (profileLine()) out += '👤 '+profileLine()+'\n';
     let last = '';
     list.forEach(e => {
       if (e.date !== last){ out += '\n'+dayName(e.date)+' '+dmy(e.date)+'\n'; last = e.date; }
@@ -653,7 +774,7 @@
     const days = [...new Set(entries.map(e => e.date))].sort();
     const w = window.open('', '_blank');
     if (!w){ window.print(); return; }
-    w.document.write('<html><head><meta charset="utf-8"><title>Diari Kesihatan</title><style>body{font-family:sans-serif;padding:16px}h2{margin:18px 0 4px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:5px;font-size:13px;vertical-align:top}th{background:#eee}</style></head><body><h1>Diari Kesihatan</h1>' +
+    w.document.write('<html><head><meta charset="utf-8"><title>Diari Kesihatan</title><style>body{font-family:sans-serif;padding:16px}h2{margin:18px 0 4px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:5px;font-size:13px;vertical-align:top}th{background:#eee}</style></head><body><h1>Diari Kesihatan</h1>' + (profileLine() ? '<p><b>'+esc(profileLine())+'</b></p>' : '') +
       days.map(d => '<h2>Tarikh: '+dmy(d)+' ('+dayName(d)+')</h2><table><tr><th>Waktu</th><th>Bacaan gula</th><th>Bacaan darah tinggi</th><th>Catatan</th></tr>' +
         byDay(d).map(e => '<tr><td>'+time12(e.time)+(e.meal?'<br>'+mealLabel(e.meal):'')+'</td><td>'+(e.sugar ?? '')+'</td><td>'+(e.sys != null ? e.sys+'/'+e.dia : '')+'</td><td>'+
           [e.food && 'Makan: '+esc(e.food), e.insulin != null && 'Insulin '+e.insulin+' unit', e.meds && 'Ubat: '+esc(e.meds), e.note && esc(e.note)].filter(Boolean).join('<br>')+'</td></tr>').join('') +
@@ -661,7 +782,7 @@
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
     currentDate = prevDate;
   };
-  $('export').onclick = () => download('diari-kesihatan-'+todayStr()+'.json', JSON.stringify(entries,null,2), 'application/json');
+  $('export').onclick = () => download('diari-kesihatan-'+todayStr()+'.json', JSON.stringify({profile, entries},null,2), 'application/json');
   $('csv').onclick = () => {
     const q = v => '"'+String(v ?? '').replace(/"/g,'""')+'"';
     const rows = [['Tarikh','Hari','Waktu','Sebelum/Selepas Makan','Gula (mmol/L)','Atas (sistolik)','Bawah (diastolik)','Makan apa','Insulin (unit)','Ubat','Catatan']];
@@ -675,7 +796,12 @@
     const r = new FileReader();
     r.onload = () => {
       try {
-        const data = JSON.parse(r.result);
+        let data = JSON.parse(r.result);
+        if (data && !Array.isArray(data) && typeof data === 'object'){
+          // newer backups: { profile, entries }
+          if (data.profile && typeof data.profile === 'object' && !profileLine()){ profile = data.profile; saveProfile(); renderProfile(); }
+          data = data.entries;
+        }
         if (!Array.isArray(data)) throw 0;
         const ids = new Set(entries.map(x => x.id));
         const add = data.filter(x => x && x.id && x.date && x.time && !ids.has(x.id));
@@ -686,6 +812,7 @@
     r.readAsText(f); e.target.value = '';
   };
 
+  renderProfile();
   renderDay();
 })();
 </script>
