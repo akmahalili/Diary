@@ -59,6 +59,21 @@
   .profile .pg b{display:block;font-size:.85rem;white-space:nowrap}
   .profile .pg small{color:var(--muted);font-size:.7rem}
   .profile .pe{color:var(--muted)}
+  /* alerts: high / low readings show red + !!! */
+  .bang{color:var(--bad);font-weight:900;letter-spacing:1px}
+  .redtxt{color:var(--bad);font-weight:800}
+  .reading .bang{font-size:.55em;vertical-align:middle;white-space:nowrap}
+  .reading{border:2px solid transparent}
+  .reading.bad,.reading.low{border-color:var(--bad)}
+  .reading.bad .val,.reading.low .val{color:var(--bad)}
+  .reading.warn .val{color:var(--warn)}
+  .entry.alert{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-bg)}
+  .alertline{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bad-bg);color:var(--bad);font-weight:800}
+  .hday.alert{border-color:var(--bad);background:#fff6f5}
+  .stats .st-bad{background:var(--bad-bg)}
+  .stats .st-bad b{color:var(--bad)}
+  .pick.alert{color:var(--bad);background:var(--bad-bg)}
+
   /* tabs: icon above label so 5 fit on a phone */
   .tabs{gap:6px}
   .tab{display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.72rem;line-height:1.2;padding:7px 1px;border-radius:12px}
@@ -496,6 +511,12 @@
     return ['ok','Normal'];
   }
 
+  /* ---------- alerts: high / low readings ---------- */
+  const isAlert = c => !!c && (c[0] === 'bad' || c[0] === 'low');
+  const sugarAlert = e => e.sugar != null && isAlert(sugarClass(e.sugar, e.meal));
+  const bpAlert = e => e.sys != null && isAlert(bpClass(e.sys, e.dia));
+  const anyAlert = e => sugarAlert(e) || bpAlert(e);
+
   /* ---------- helpers ---------- */
   function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function mealLabel(m){ return m === 'sebelum' ? 'Sebelum makan' : m === 'selepas' ? 'Selepas makan' : ''; }
@@ -536,21 +557,26 @@
     $('entries').innerHTML = list.map(e => {
       const sc = sugarClass(e.sugar, e.meal);
       const bc = bpClass(e.sys, e.dia);
+      const al = [];
+      if (sugarAlert(e)) al.push('Gula darah '+(sc[0] === 'low' ? 'RENDAH' : 'TINGGI'));
+      if (bpAlert(e)) al.push('Darah '+(bc[0] === 'low' ? 'RENDAH' : 'TINGGI'));
+      const bang = ' <span class="bang">!!!</span>';
       const notes = [];
       if (e.food) notes.push('<div>🍚 <b>Makan:</b> '+esc(e.food)+'</div>');
       if (e.insulin != null) notes.push('<div>💉 <b>Insulin:</b> '+e.insulin+' unit</div>');
       if (e.meds) notes.push('<div>💊 <b>Ubat:</b> '+esc(e.meds)+'</div>');
       if (e.note) notes.push('<div>📝 '+esc(e.note)+'</div>');
-      return '<div class="entry">' +
+      return '<div class="entry'+(al.length ? ' alert' : '')+'">' +
         '<div class="entry-top"><span class="time">'+time12(e.time)+'</span>' +
         (e.meal ? '<span class="pill">'+mealLabel(e.meal)+'</span>' : '') + '</div>' +
+        (al.length ? '<div class="alertline">⚠️ '+al.join(' · ')+' !!!</div>' : '') +
         ((e.sugar != null || e.sys != null) ?
           '<div class="readings">' +
           '<div class="reading '+(sc?sc[0]:'')+'"><div class="lbl">Gula darah</div>' +
-            '<div class="val">'+(e.sugar != null ? e.sugar : '–')+'</div><div class="unit">mmol/L</div>' +
+            '<div class="val">'+(e.sugar != null ? e.sugar : '–')+(sugarAlert(e) ? bang : '')+'</div><div class="unit">mmol/L</div>' +
             (sc ? '<div class="tag">'+sc[1]+'</div>' : '') + '</div>' +
           '<div class="reading '+(bc?bc[0]:'')+'"><div class="lbl">Darah tinggi</div>' +
-            '<div class="val">'+(e.sys != null ? e.sys+'/'+e.dia : '–')+'</div><div class="unit">mmHg</div>' +
+            '<div class="val">'+(e.sys != null ? e.sys+'/'+e.dia : '–')+(bpAlert(e) ? bang : '')+'</div><div class="unit">mmHg</div>' +
             (bc ? '<div class="tag">'+bc[1]+'</div>' : '') + '</div>' +
           '</div>' : '') +
         (notes.length ? '<div class="notes">'+notes.join('')+'</div>' : '') +
@@ -573,8 +599,9 @@
       const l = byDay(d);
       const s = l.filter(e => e.sugar != null).map(e => e.sugar);
       const b = l.filter(e => e.sys != null);
-      return '<button class="hday" data-day="'+d+'">' +
-        '<div class="l"><b>'+dayName(d)+', '+dmy(d)+'</b><small>'+l.length+' bacaan'+(counts[d] ? ' · 📷 '+counts[d] : '')+'</small></div>' +
+      const hot = l.some(anyAlert);
+      return '<button class="hday'+(hot ? ' alert' : '')+'" data-day="'+d+'">' +
+        '<div class="l"><b>'+dayName(d)+', '+dmy(d)+(hot ? ' <span class="bang">!!!</span>' : '')+'</b><small>'+l.length+' bacaan'+(counts[d] ? ' · 📷 '+counts[d] : '')+'</small></div>' +
         '<div class="r">' +
           (s.length ? 'Gula: <b>'+Math.min(...s)+(s.length>1?' – '+Math.max(...s):'')+'</b><br>' : '') +
           (b.length ? 'Darah: <b>'+b[b.length-1].sys+'/'+b[b.length-1].dia+'</b>' : '') +
@@ -644,8 +671,9 @@
 
   function entryParts(e, forText){
     const p = [];
-    if (e.sugar != null) p.push('Gula '+e.sugar);
-    if (e.sys != null) p.push('BP '+e.sys+'/'+e.dia);
+    const mark = (txt, a) => !a ? txt : (forText ? txt+' !!!' : '<span class="redtxt">'+txt+' !!!</span>');
+    if (e.sugar != null) p.push(mark('Gula '+e.sugar, sugarAlert(e)));
+    if (e.sys != null) p.push(mark('BP '+e.sys+'/'+e.dia, bpAlert(e)));
     if (e.insulin != null) p.push('Insulin '+e.insulin+'u');
     if (e.food) p.push('Makan: '+(forText ? e.food : esc(e.food)));
     if (e.meds) p.push('Ubat: '+(forText ? e.meds : esc(e.meds)));
@@ -676,13 +704,13 @@
       h += '<div class="card sblock"><h3>🩸 Gula dalam darah <span class="hint" style="font-weight:400">(mmol/L)</span></h3>' +
         '<div class="stats">'+stat('Purata', f1(S.sg.avg))+stat('Terendah', f1(S.sg.min))+stat('Tertinggi', f1(S.sg.max))+stat('Bacaan', S.sg.n)+'</div>' +
         '<div class="stats">'+stat('Purata sebelum makan', f1(S.sg.avgB))+stat('Purata selepas makan', f1(S.sg.avgA))+'</div>' +
-        '<div class="stats">'+stat('Dalam sasaran', pct(S.sg.ok, S.sg.n))+stat('Rendah', S.sg.low+'×')+stat('Tinggi', S.sg.high+'×')+'</div>' +
+        '<div class="stats">'+stat('Dalam sasaran', pct(S.sg.ok, S.sg.n))+stat('Rendah', S.sg.low+'×', S.sg.low ? 'st-bad' : '')+stat('Tinggi', S.sg.high+'×', S.sg.high ? 'st-bad' : '')+'</div>' +
         (deltaTxt(S.sg.avg, PS.sg.avg, P.prevName, 1) ? '<div class="delta">Purata gula: '+deltaTxt(S.sg.avg, PS.sg.avg, P.prevName, 1)+'</div>' : '') + '</div>';
     }
     if (S.bp.n){
       h += '<div class="card sblock"><h3>❤️ Darah tinggi <span class="hint" style="font-weight:400">(mmHg)</span></h3>' +
         '<div class="stats">'+stat('Purata', f0(S.bp.sys)+'/'+f0(S.bp.dia))+stat('Tertinggi', S.bp.maxS+'/'+S.bp.maxD)+stat('Terendah', S.bp.minS+'/'+S.bp.minD)+stat('Bacaan', S.bp.n)+'</div>' +
-        '<div class="stats">'+stat('Tinggi (≥140/90)', S.bp.high+'×')+'</div>' +
+        '<div class="stats">'+stat('Tinggi (≥140/90)', S.bp.high+'×', S.bp.high ? 'st-bad' : '')+'</div>' +
         (deltaTxt(S.bp.sys, PS.bp.sys, P.prevName, 0) ? '<div class="delta">Purata atas: '+deltaTxt(S.bp.sys, PS.bp.sys, P.prevName, 0)+'</div>' : '') + '</div>';
     }
     if (S.ins.n){
@@ -703,7 +731,8 @@
         '<div class="brow bh"><span>Tarikh</span><span>Gula (purata)</span><span>Darah (purata)</span><span>Insulin</span></div>' +
         days.map(d => {
           const l = list.filter(e => e.date === d), s = statsOf(l);
-          return '<button type="button" class="brow" data-day="'+d+'"><span>'+dayName(d).slice(0,3)+' '+pad(parse(d).getDate())+'/'+pad(parse(d).getMonth()+1)+'</span>' +
+          const hot = l.some(anyAlert);
+          return '<button type="button" class="brow" data-day="'+d+'"><span'+(hot ? ' class="redtxt"' : '')+'>'+dayName(d).slice(0,3)+' '+pad(parse(d).getDate())+'/'+pad(parse(d).getMonth()+1)+(hot ? ' !!!' : '')+'</span>' +
             '<span>'+f1(s.sg.avg)+'</span><span>'+(s.bp.n ? f0(s.bp.sys)+'/'+f0(s.bp.dia) : '–')+'</span><span>'+(s.ins.n ? f1(s.ins.total)+' u' : '–')+'</span></button>';
         }).join('') + '</div>';
     }
@@ -725,10 +754,10 @@
     if (S.sg.n){
       o += '\n🩸 Gula (mmol/L)\n• Purata '+f1(S.sg.avg)+' (terendah '+f1(S.sg.min)+', tertinggi '+f1(S.sg.max)+')\n';
       if (S.sg.avgB != null || S.sg.avgA != null) o += '• Sebelum makan '+f1(S.sg.avgB)+' | Selepas makan '+f1(S.sg.avgA)+'\n';
-      o += '• Dalam sasaran '+pct(S.sg.ok, S.sg.n)+' | Rendah '+S.sg.low+'× | Tinggi '+S.sg.high+'×\n';
+      o += '• Dalam sasaran '+pct(S.sg.ok, S.sg.n)+' | Rendah '+S.sg.low+'× | Tinggi '+S.sg.high+'×'+((S.sg.low || S.sg.high) ? ' !!!' : '')+'\n';
     }
     if (S.bp.n){
-      o += '\n❤️ Darah tinggi (mmHg)\n• Purata '+f0(S.bp.sys)+'/'+f0(S.bp.dia)+' (tertinggi '+S.bp.maxS+'/'+S.bp.maxD+', terendah '+S.bp.minS+'/'+S.bp.minD+')\n• Bacaan tinggi (≥140/90): '+S.bp.high+'×\n';
+      o += '\n❤️ Darah tinggi (mmHg)\n• Purata '+f0(S.bp.sys)+'/'+f0(S.bp.dia)+' (tertinggi '+S.bp.maxS+'/'+S.bp.maxD+', terendah '+S.bp.minS+'/'+S.bp.minD+')\n• Bacaan tinggi (≥140/90): '+S.bp.high+'×'+(S.bp.high ? ' !!!' : '')+'\n';
     }
     if (S.ins.n) o += '\n💉 Insulin\n• Jumlah '+f1(S.ins.total)+' unit | Purata '+f1(S.ins.total / S.ins.days)+' unit/hari\n';
     if (S.meds.length) o += '\n💊 Ubat\n'+S.meds.map(m => '• '+m.name+' ('+m.n+'×)').join('\n')+'\n';
@@ -789,7 +818,7 @@
     });
     return s + '</svg>';
   }
-  function stat(label, val){ return '<div><b>'+val+'</b><small>'+label+'</small></div>'; }
+  function stat(label, val, cls){ return '<div'+(cls ? ' class="'+cls+'"' : '')+'><b>'+val+'</b><small>'+label+'</small></div>'; }
 
   function renderCharts(){
     document.querySelectorAll('#range button').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.n) === rangeDays));
@@ -844,8 +873,13 @@
     const c = e.target.closest('circle[data-i]'); if (!c) return;
     const p = window._chartPts[Number(c.dataset.i)]; if (!p) return;
     const when = dmy(p.date)+' · '+time12(p.time)+(p.meal ? ' · '+mealLabel(p.meal) : '');
-    if (c.dataset.c === 's') $('pickS').textContent = when+' → Gula '+p.sugar+' mmol/L';
-    else $('pickB').textContent = when+' → '+p.sys+'/'+p.dia+' mmHg';
+    if (c.dataset.c === 's'){
+      $('pickS').textContent = when+' → Gula '+p.sugar+' mmol/L'+(sugarAlert(p) ? ' !!!' : '');
+      $('pickS').classList.toggle('alert', sugarAlert(p));
+    } else {
+      $('pickB').textContent = when+' → '+p.sys+'/'+p.dia+' mmHg'+(bpAlert(p) ? ' !!!' : '');
+      $('pickB').classList.toggle('alert', bpAlert(p));
+    }
   });
 
   /* ---------- offline ---------- */
@@ -1108,8 +1142,8 @@
       if (e.date !== last){ out += '\n'+dayName(e.date)+' '+dmy(e.date)+'\n'; last = e.date; }
       const p = [time12(e.time)];
       if (e.meal) p.push(mealLabel(e.meal));
-      if (e.sugar != null) p.push('Gula '+e.sugar);
-      if (e.sys != null) p.push('BP '+e.sys+'/'+e.dia);
+      if (e.sugar != null) p.push('Gula '+e.sugar+(sugarAlert(e) ? ' !!!' : ''));
+      if (e.sys != null) p.push('BP '+e.sys+'/'+e.dia+(bpAlert(e) ? ' !!!' : ''));
       if (e.insulin != null) p.push('Insulin '+e.insulin+'u');
       if (e.food) p.push('Makan: '+e.food);
       if (e.meds) p.push('Ubat: '+e.meds);
