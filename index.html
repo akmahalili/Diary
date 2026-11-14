@@ -124,7 +124,7 @@
   .datebar .mid{flex:1;text-align:center}
   .datebar .mid .d{font-size:1.25rem;font-weight:800}
   .datebar .mid .h{color:var(--muted);font-size:.95rem}
-  .datebar input[type=date]{margin-top:4px;font:inherit;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:#fff}
+  .datebar input[type=date],.datebar input[type=month]{margin-top:4px;font:inherit;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:#fff}
   .week{display:flex;justify-content:center;gap:6px;margin:6px 0 4px}
   .week span{font-size:.62rem;font-weight:700;color:var(--muted);text-align:center}
   .week i{display:block;width:26px;height:26px;border:2px solid var(--muted);border-radius:6px;margin-top:2px;position:relative}
@@ -263,6 +263,7 @@
         <div class="mid">
           <div class="d" id="sLabel" style="font-size:1.05rem"></div>
           <div class="h" id="sSub"></div>
+          <input type="date" id="sPick" aria-label="Pilih tarikh">
         </div>
         <button class="nav" id="sNext" aria-label="Seterusnya">›</button>
       </div>
@@ -726,6 +727,9 @@
     const PS = statsOf(inRange(P.prev[0], P.prev[1]));
     const t = todayStr();
     $('sDailyBtns').hidden = sumType === 'hari';
+    const pk = $('sPick'), wantType = sumType === 'bulan' ? 'month' : 'date';
+    if (pk.type !== wantType) pk.type = wantType;
+    pk.value = wantType === 'month' ? sumAnchor.slice(0, 7) : sumAnchor;
     $('sLabel').textContent = P.label;
     $('sSub').textContent = (P.from <= t && t <= P.to) ? (sumType === 'hari' ? 'Hari ini' : (sumType === 'minggu' ? 'Minggu ini' : 'Bulan ini')) : '';
 
@@ -809,6 +813,11 @@
     const b = e.target.closest('button'); if (!b) return;
     sumType = b.dataset.t; renderSummary();
   });
+  $('sPick').onchange = e => {
+    const v = e.target.value; if (!v) return;
+    sumAnchor = sumType === 'bulan' ? v+'-01' : v;
+    renderSummary();
+  };
   $('sPrev').onclick = () => { sumAnchor = shiftAnchor(sumType, sumAnchor, -1); renderSummary(); };
   $('sNext').onclick = () => { sumAnchor = shiftAnchor(sumType, sumAnchor, 1); renderSummary(); };
   $('sumBody').addEventListener('click', e => {
